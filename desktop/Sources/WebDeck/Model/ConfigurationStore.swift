@@ -103,12 +103,23 @@ final class ConfigurationStore: ObservableObject {
         commit()
     }
 
-    /// Update an existing page's name / column count. No-op if the page is
-    /// not found.
-    func updatePage(id: String, name: String? = nil, columns: Int? = nil) {
+    /// Update an existing page's editable fields. No-op if the page
+    /// is not found. Each parameter is optional — pass only the ones
+    /// that changed.
+    func updatePage(
+        id: String,
+        name: String? = nil,
+        columns: Int? = nil,
+        columnsPortrait: Int? = nil,
+        columnsLandscape: Int? = nil,
+        orientationLock: OrientationLock?? = nil
+    ) {
         guard let i = layout.pages.firstIndex(where: { $0.id == id }) else { return }
         if let name { layout.pages[i].name = name }
         if let columns { layout.pages[i].columns = columns }
+        if let columnsPortrait { layout.pages[i].columnsPortrait = columnsPortrait }
+        if let columnsLandscape { layout.pages[i].columnsLandscape = columnsLandscape }
+        if let orientationLock { layout.pages[i].orientationLock = orientationLock }
         commit()
     }
 
