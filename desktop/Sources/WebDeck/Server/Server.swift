@@ -240,8 +240,17 @@ final class Server: ObservableObject, @unchecked Sendable {
             Task { @MainActor in
                 let button = DeckStore.shared.button(id: buttonId)
                 var ok = false
-                if let action = button?.action, action.kind == .openApp, let bundleId = action.bundleId {
-                    ok = AppLauncher.openApp(bundleId: bundleId)
+                switch button?.action.kind {
+                case .openApp:
+                    if let bundleId = button?.action.bundleId {
+                        ok = AppLauncher.openApp(bundleId: bundleId)
+                    }
+                case .keyShortcut:
+                    if let shortcut = button?.action.shortcut {
+                        ok = KeyEmitter.send(shortcut, activating: button?.action.bundleId)
+                    }
+                default:
+                    break
                 }
                 self.sendServerMessage(.ack(buttonId: buttonId, ok: ok), to: conn)
             }
