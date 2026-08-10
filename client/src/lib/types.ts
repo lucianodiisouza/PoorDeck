@@ -6,10 +6,22 @@ export interface Layout {
   theme: Theme;
 }
 
+export type OrientationLock = "portrait" | "landscape";
+
 export interface Page {
   id: string;
   name: string;
+  /** Default column count. Used when columnsPortrait / columnsLandscape
+   *  aren't set, so layouts saved before per-orientation columns keep
+   *  working. */
   columns: number;
+  /** Columns when the device is portrait. Wins over `columns` when set. */
+  columnsPortrait?: number;
+  /** Columns when the device is landscape. Wins over `columns` when set. */
+  columnsLandscape?: number;
+  /** If set, the client forces the chosen orientation regardless of
+   *  what the device reports. The canvas respects the same flag. */
+  orientationLock?: OrientationLock;
   buttons: Button[];
 }
 

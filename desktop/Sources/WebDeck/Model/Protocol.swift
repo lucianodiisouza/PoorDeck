@@ -17,9 +17,37 @@ struct Layout: Codable, Equatable {
 struct Page: Codable, Identifiable, Equatable {
     var id: String
     var name: String
-    /// Column count the client uses to lay the grid out.
+    /// Column count the client uses to lay the grid out. Kept as a
+    /// fallback for layouts saved before per-orientation columns
+    /// existed — `columnsPortrait` / `columnsLandscape` win when
+    /// they're present.
     var columns: Int
+    /// Column count when the device is in portrait. When nil, falls
+    /// back to `columns` so existing layouts keep working.
+    var columnsPortrait: Int?
+    /// Column count when the device is in landscape. When nil,
+    /// falls back to `columns` (or `columnsPortrait` as a last resort).
+    var columnsLandscape: Int?
+    /// If set, the client forces the chosen orientation regardless of
+    /// what the device sensor reports. The canvas respects the same
+    /// flag so the preview matches what the user will actually see.
+    /// `nil` means "follow device orientation".
+    var orientationLock: OrientationLock?
     var buttons: [DeckButton]
+
+    /// The column count the client should use, given a viewport
+    /// orientation. Centralizes the portrait/landscape lookup so the
+    /// editor, the canvas, and the client all read the same logic.
+    func columns(forPortrait isPortrait: Bool) -> Int {
+        if isPortrait, let c = columnsPortrait { return c }
+        if !isPortrait, let c = columnsLandscape { return c }
+        return columns
+    }
+}
+
+enum OrientationLock: String, Codable, Equatable {
+    case portrait
+    case landscape
 }
 
 /// Named `DeckButton` (not `Button`) to avoid colliding with SwiftUI.Button in
