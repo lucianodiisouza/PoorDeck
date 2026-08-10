@@ -8,26 +8,36 @@ import SwiftUI
 /// layout to connected clients automatically. No explicit "Save" button.
 struct LayoutEditorView: View {
     @ObservedObject var store: ConfigurationStore
+    @EnvironmentObject private var server: Server
     @State private var selectedPageId: String?
     @State private var selectedButtonId: String?
 
     var body: some View {
-        HSplitView {
-            HSplitView {
-                pageList
-                    .frame(minWidth: 160, idealWidth: 180, maxWidth: 220)
-                buttonGrid
-                    .frame(minWidth: 380)
-            }
-            .frame(maxWidth: .infinity)
+        HStack(spacing: 0) {
+            pageList
+                .frame(minWidth: 180, idealWidth: 200, maxWidth: 240)
+                .background(.thinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.vertical, 4)
+                .padding(.leading, 4)
 
-            if currentButton != nil, let pageId = currentPage?.id {
-                buttonForm
-                    .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
-            } else {
-                hintPane
-                    .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
+            buttonGrid
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 4)
+
+            Group {
+                if currentButton != nil, let pageId = currentPage?.id {
+                    buttonForm
+                } else {
+                    hintPane
+                }
             }
+            .frame(minWidth: 280, idealWidth: 320, maxHeight: .infinity)
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.vertical, 4)
+            .padding(.trailing, 4)
         }
         .onAppear {
             if selectedPageId == nil {
@@ -146,6 +156,7 @@ struct LayoutEditorView: View {
 
     @State private var device: DevicePreview.DeviceFamily = .phone
     @State private var portrait: Bool = true
+    @State private var followDevice: Bool = false
 
     private var buttonGrid: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -153,13 +164,19 @@ struct LayoutEditorView: View {
                 // Page-level controls: name + columns + add button. These
                 // are controls of the page itself, not of the preview, so
                 // they sit above the canvas rather than inside it.
-                HStack(spacing: 12) {
-                    TextField("Page name", text: Binding(
-                        get: { page.name },
-                        set: { store.updatePage(id: page.id, name: $0) }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 200)
+                HStack(alignment: .top, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Page")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        TextField("Name", text: Binding(
+                            get: { page.name },
+                            set: { store.updatePage(id: page.id, name: $0) }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 140)
+                    }
 
                     orientationControls(for: page)
 
@@ -186,6 +203,8 @@ struct LayoutEditorView: View {
                     page: pageWithIcons(page),
                     device: $device,
                     portrait: $portrait,
+                    followDevice: $followDevice,
+                    serverDeviceOrientationIsPortrait: server.lastDeviceOrientationIsPortrait,
                     selectedButtonId: selectedButtonId,
                     onSelect: { id in selectedButtonId = id }
                 )
@@ -236,91 +255,129 @@ struct LayoutEditorView: View {
         store.layout.pages.first(where: { $0.id == pageId })?.buttons.last?.id
     }
 
-    /// Page-level controls: default column count, per-orientation
-    /// column overrides, and the orientation lock. A single menu
-    /// keeps the bar compact; expanding to a separate panel would
-    /// add visual weight for a feature most users set once.
+    /// Page-level controls laid out as a horizontal toolbar: each field
+    /// is its own compact group with a label, so the bar reads as
+    /// "name / cols / portrait / landscape / lock" without dropdowns.
     @ViewBuilder
     private func orientationControls(for page: Page) -> some View {
-        Menu {
-            Section("Default columns") {
-                Stepper(value: Binding(
-                    get: { page.columns },
-                    set: { store.updatePage(id: page.id, columns: $0) }
-                ), in: 1...8) {
-                    Text("Cols: \(page.columns)")
-                }
-            }
-            Section("Per orientation") {
-                Toggle("Set portrait columns", isOn: portraitOverrideBinding(for: page))
-                if page.columnsPortrait != nil {
-                    Stepper(value: Binding(
-                        get: { page.columnsPortrait ?? page.columns },
-                        set: { store.updatePage(id: page.id, columnsPortrait: $0) }
-                    ), in: 1...8) {
-                        Text("Portrait: \(page.columnsPortrait ?? page.columns)")
-                    }
-                }
-                Toggle("Set landscape columns", isOn: landscapeOverrideBinding(for: page))
-                if page.columnsLandscape != nil {
-                    Stepper(value: Binding(
-                        get: { page.columnsLandscape ?? page.columns },
-                        set: { store.updatePage(id: page.id, columnsLandscape: $0) }
-                    ), in: 1...8) {
-                        Text("Landscape: \(page.columnsLandscape ?? page.columns)")
-                    }
-                }
-            }
-            Section("Orientation lock") {
-                Button("Follow device") {
-                    store.updatePage(id: page.id, orientationLock: .some(nil))
-                }
-                Button("Lock to portrait") {
-                    store.updatePage(id: page.id, orientationLock: .some(.portrait))
-                }
-                Button("Lock to landscape") {
-                    store.updatePage(id: page.id, orientationLock: .some(.landscape))
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: page.orientationLock == nil ? "rectangle.portrait.arrowtriangle" : "lock")
-                Text(orientationLabel(for: page))
-                    .lineLimit(1)
-            }
-            .font(.system(size: 12))
+        HStack(spacing: 14) {
+            colsField(
+                label: "Cols",
+                value: page.columns,
+                onChange: { store.updatePage(id: page.id, columns: $0) }
+            )
+            orientationField(
+                label: "Portrait",
+                value: page.columnsPortrait,
+                fallback: page.columns,
+                onEnable: { store.updatePage(id: page.id, columnsPortrait: page.columns) },
+                onChange: { store.updatePage(id: page.id, columnsPortrait: $0) },
+                onDisable: { store.updatePage(id: page.id, columnsPortrait: nil) }
+            )
+            orientationField(
+                label: "Landscape",
+                value: page.columnsLandscape,
+                fallback: page.columns,
+                onEnable: { store.updatePage(id: page.id, columnsLandscape: page.columns) },
+                onChange: { store.updatePage(id: page.id, columnsLandscape: $0) },
+                onDisable: { store.updatePage(id: page.id, columnsLandscape: nil) }
+            )
+            lockField(for: page)
         }
-        .menuStyle(.borderlessButton)
-        .frame(maxWidth: 220)
     }
 
-    private func orientationLabel(for page: Page) -> String {
-        let parts: [String] = {
-            var p: [String] = ["Cols \(page.columns)"]
-            if let cp = page.columnsPortrait { p.append("P:\(cp)") }
-            if let cl = page.columnsLandscape { p.append("L:\(cl)") }
-            if let lock = page.orientationLock { p.append("lock \(lock.rawValue)") }
-            return p
-        }()
-        return parts.joined(separator: " · ")
-    }
-
-    private func portraitOverrideBinding(for page: Page) -> Binding<Bool> {
-        Binding(
-            get: { page.columnsPortrait != nil },
-            set: { on in
-                store.updatePage(id: page.id, columnsPortrait: on ? page.columns : nil)
+    /// A small label + stepper pair used for the default columns.
+    @ViewBuilder
+    private func colsField(label: String, value: Int, onChange: @escaping (Int) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            Stepper(value: Binding(get: { value }, set: onChange), in: 1...8) {
+                Text("\(value)")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .frame(minWidth: 18, alignment: .leading)
             }
-        )
+            .labelsHidden()
+        }
     }
 
-    private func landscapeOverrideBinding(for page: Page) -> Binding<Bool> {
-        Binding(
-            get: { page.columnsLandscape != nil },
-            set: { on in
-                store.updatePage(id: page.id, columnsLandscape: on ? page.columns : nil)
+    /// A label + stepper pair for an orientation column override. The
+    /// stepper is grayed out until the override is "set"; clicking
+    /// the (—) glyph enables the override and seeds it with the
+    /// current default; clicking the value disables it.
+    @ViewBuilder
+    private func orientationField(
+        label: String,
+        value: Int?,
+        fallback: Int,
+        onEnable: @escaping () -> Void,
+        onChange: @escaping (Int) -> Void,
+        onDisable: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            HStack(spacing: 4) {
+                if let v = value {
+                    Stepper(value: Binding(get: { v }, set: onChange), in: 1...8) {
+                        Text("\(v)")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .frame(minWidth: 18, alignment: .leading)
+                    }
+                    .labelsHidden()
+                    Button {
+                        onDisable()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Clear the \(label.lowercased()) override and use the default (\(fallback))")
+                } else {
+                    Button(action: onEnable) {
+                        HStack(spacing: 4) {
+                            Text("—")
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                            Text("(default \(fallback))")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Set a separate \(label.lowercased()) column count")
+                }
             }
-        )
+        }
+    }
+
+    /// Segmented picker for the orientation lock. Three states: free
+    /// (follow device), portrait, landscape.
+    @ViewBuilder
+    private func lockField(for page: Page) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Lock")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            Picker("", selection: Binding<OrientationLock?>(
+                get: { page.orientationLock },
+                set: { newValue in
+                    store.updatePage(id: page.id, orientationLock: .some(newValue))
+                }
+            )) {
+                Text("Free").tag(OrientationLock?.none)
+                Text("Portrait").tag(OrientationLock?.some(.portrait))
+                Text("Landscape").tag(OrientationLock?.some(.landscape))
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 200)
+        }
     }
 
     /// Resolve the page's buttons to a copy with icons filled in from the
