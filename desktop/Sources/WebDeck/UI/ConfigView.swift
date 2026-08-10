@@ -41,6 +41,7 @@ struct ConfigView: View {
             Spacer()
 
             accessibilityStatus
+            audioStatus
 
             HStack(spacing: 6) {
                 Circle()
@@ -55,32 +56,60 @@ struct ConfigView: View {
         .frame(width: 200, alignment: .leading)
     }
 
-    private var accessibilityStatus: some View {
+    /// Per-permission status block: a checkmark/triangle row plus either a
+    /// "granted" caption or a brief explanation + Grant / Settings buttons.
+    private func permissionRow(
+        granted: Bool,
+        title: String,
+        grantedCaption: String,
+        deniedCaption: String,
+        grant: @escaping () -> Void,
+        openSettings: @escaping () -> Void
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: permissions.accessibilityGranted
+                Image(systemName: granted
                       ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(permissions.accessibilityGranted ? .green : .orange)
-                Text("Accessibility")
+                    .foregroundStyle(granted ? .green : .orange)
+                Text(title)
                     .font(.caption.bold())
             }
-            if permissions.accessibilityGranted {
-                Text("Keyboard shortcuts enabled")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Needed for keyboard-shortcut buttons")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            Text(granted ? grantedCaption : deniedCaption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !granted {
                 HStack(spacing: 8) {
-                    Button("Grant…") { permissions.requestAccessibility() }
+                    Button("Grant…", action: grant)
                         .controlSize(.small)
-                    Button("Settings") { permissions.openAccessibilitySettings() }
+                    Button("Settings", action: openSettings)
                         .controlSize(.small)
                 }
             }
         }
         .padding(.bottom, 8)
+    }
+
+    private var accessibilityStatus: some View {
+        permissionRow(
+            granted: permissions.accessibilityGranted,
+            title: "Accessibility",
+            grantedCaption: "Keyboard shortcuts enabled",
+            deniedCaption: "Needed for keyboard-shortcut buttons",
+            grant: permissions.requestAccessibility,
+            openSettings: permissions.openAccessibilitySettings
+        )
+    }
+
+    private var audioStatus: some View {
+        permissionRow(
+            granted: permissions.audioGranted,
+            title: "Audio capture",
+            grantedCaption: "Per-app volume control enabled",
+            deniedCaption: "Needed to control the volume of each app individually",
+            grant: permissions.requestAudio,
+            openSettings: permissions.openAudioSettings
+        )
     }
 
     private var pairingPanel: some View {
