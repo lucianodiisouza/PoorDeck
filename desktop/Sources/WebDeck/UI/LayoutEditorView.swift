@@ -159,13 +159,9 @@ struct LayoutEditorView: View {
                         set: { store.updatePage(id: page.id, name: $0) }
                     ))
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 220)
+                    .frame(maxWidth: 200)
 
-                    Stepper("Cols: \(page.columns)", value: Binding(
-                        get: { page.columns },
-                        set: { store.updatePage(id: page.id, columns: $0) }
-                    ), in: 1...6)
-                    .frame(maxWidth: 140)
+                    orientationControls(for: page)
 
                     Spacer()
 
@@ -238,6 +234,93 @@ struct LayoutEditorView: View {
     }
     private func lastInsertedButtonId(in pageId: String) -> String? {
         store.layout.pages.first(where: { $0.id == pageId })?.buttons.last?.id
+    }
+
+    /// Page-level controls: default column count, per-orientation
+    /// column overrides, and the orientation lock. A single menu
+    /// keeps the bar compact; expanding to a separate panel would
+    /// add visual weight for a feature most users set once.
+    @ViewBuilder
+    private func orientationControls(for page: Page) -> some View {
+        Menu {
+            Section("Default columns") {
+                Stepper(value: Binding(
+                    get: { page.columns },
+                    set: { store.updatePage(id: page.id, columns: $0) }
+                ), in: 1...8) {
+                    Text("Cols: \(page.columns)")
+                }
+            }
+            Section("Per orientation") {
+                Toggle("Set portrait columns", isOn: portraitOverrideBinding(for: page))
+                if page.columnsPortrait != nil {
+                    Stepper(value: Binding(
+                        get: { page.columnsPortrait ?? page.columns },
+                        set: { store.updatePage(id: page.id, columnsPortrait: $0) }
+                    ), in: 1...8) {
+                        Text("Portrait: \(page.columnsPortrait ?? page.columns)")
+                    }
+                }
+                Toggle("Set landscape columns", isOn: landscapeOverrideBinding(for: page))
+                if page.columnsLandscape != nil {
+                    Stepper(value: Binding(
+                        get: { page.columnsLandscape ?? page.columns },
+                        set: { store.updatePage(id: page.id, columnsLandscape: $0) }
+                    ), in: 1...8) {
+                        Text("Landscape: \(page.columnsLandscape ?? page.columns)")
+                    }
+                }
+            }
+            Section("Orientation lock") {
+                Button("Follow device") {
+                    store.updatePage(id: page.id, orientationLock: .some(nil))
+                }
+                Button("Lock to portrait") {
+                    store.updatePage(id: page.id, orientationLock: .some(.portrait))
+                }
+                Button("Lock to landscape") {
+                    store.updatePage(id: page.id, orientationLock: .some(.landscape))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: page.orientationLock == nil ? "rectangle.portrait.arrowtriangle" : "lock")
+                Text(orientationLabel(for: page))
+                    .lineLimit(1)
+            }
+            .font(.system(size: 12))
+        }
+        .menuStyle(.borderlessButton)
+        .frame(maxWidth: 220)
+    }
+
+    private func orientationLabel(for page: Page) -> String {
+        let parts: [String] = {
+            var p: [String] = ["Cols \(page.columns)"]
+            if let cp = page.columnsPortrait { p.append("P:\(cp)") }
+            if let cl = page.columnsLandscape { p.append("L:\(cl)") }
+            if let lock = page.orientationLock { p.append("lock \(lock.rawValue)") }
+            return p
+        }()
+        return parts.joined(separator: " · ")
+    }
+
+    private func portraitOverrideBinding(for page: Page) -> Binding<Bool> {
+        Binding(
+            get: { page.columnsPortrait != nil },
+            set: { on in
+                store.updatePage(id: page.id, columnsPortrait: on ? page.columns : nil)
+            }
+        )
+    }
+
+    private func landscapeOverrideBinding(for page: Page) -> Binding<Bool> {
+        Binding(
+            get: { page.columnsLandscape != nil },
+            set: { on in
+                store.updatePage(id: page.id, columnsLandscape: on ? page.columns : nil)
+            }
+        )
     }
 
     /// Resolve the page's buttons to a copy with icons filled in from the
