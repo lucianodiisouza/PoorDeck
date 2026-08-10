@@ -1,11 +1,11 @@
-<h1 align="center">WebDeck</h1>
+<h1 align="center">PoorDeck</h1>
 
 <p align="center">
   <em>A Stream-Deck-style control surface for your Mac — driven from your phone,
   tablet, or any browser on the same Wi-Fi.</em>
 </p>
 
-WebDeck is two projects:
+PoorDeck is two projects:
 
 - **`desktop/`** — a macOS menu-bar app (SwiftUI) that *is* the server. It hosts
   the client, executes the actions, and holds the configuration.
@@ -19,9 +19,9 @@ code (or typing the URL). Same Wi-Fi is all it needs.
 
 ```
 ┌──────────────── Mac ────────────────┐        ┌──── phone / tablet / web ────┐
-│  WebDeck.app (menu bar + config)     │  http  │  Svelte client                │
+│  PoorDeck.app (menu bar + config)    │  http  │  Svelte client                │
 │  • HTTP + WebSocket server (native)  │◀──────▶│  • renders pages              │
-│  • Bonjour  _webdeck._tcp            │   ws   │  • swipe to switch page       │
+│  • Bonjour  _poordeck._tcp           │   ws   │  • swipe to switch page       │
 │  • executes: open/switch app …       │        │  • tap to fire an action      │
 └──────────────────────────────────────┘        └───────────────────────────────┘
 ```
@@ -40,7 +40,11 @@ This first cut proves the risky end-to-end path:
 - [x] Tap a button → open / switch the target Mac app (with its real icon)
 - [x] Swipe between pages
 - [x] Keyboard-shortcut actions (CGEvent + Accessibility)
-- [ ] Per-app volume sliders / knobs — reuse the `voulum` process-tap engine
+- [x] System volume slider + mute (master output, live updates both ways)
+- [x] Per-app volume — Core Audio process taps drive a live list of apps
+      playing audio on the Volume page (icons + horizontal sliders + mute).
+      Boost up to 2× and per-app mute. Built on the same process-tap
+      pipeline that powers [Voulum](https://github.com/lucianodiisouza/voulum).
 - [ ] Page / button / theme editors in the desktop config window
 - [ ] Persisted configuration
 

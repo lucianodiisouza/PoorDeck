@@ -2,7 +2,7 @@
 .DS_Store
 
 # Xcode / xcodegen
-desktop/WebDeck.xcodeproj/
+desktop/PoorDeck.xcodeproj/
 desktop/build/
 *.xcuserstate
 DerivedData/

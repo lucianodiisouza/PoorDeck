@@ -13,7 +13,7 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDisplayName</key>
-	<string>WebDeck</string>
+	<string>PoorDeck</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -28,10 +28,14 @@
 	<!-- Local network access is required to serve the client and accept
 	     WebSocket connections from phones/tablets on the same Wi-Fi. -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>WebDeck serves its control surface to your phone or tablet over your local network.</string>
+	<string>PoorDeck serves its control surface to your phone or tablet over your local network.</string>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_webdeck._tcp</string>
+		<string>_poordeck._tcp</string>
 	</array>
+	<!-- Per-app volume needs to tap other apps' audio. macOS shows this string
+	     in the TCC prompt the first time the user adjusts an app's volume. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>PoorDeck captures other apps' audio to control their volume individually.</string>
 </dict>
 </plist>

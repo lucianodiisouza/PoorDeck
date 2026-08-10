@@ -1,8 +1,8 @@
-name: WebDeck
+name: PoorDeck
 options:
-  bundleIdPrefix: com.webdeck
+  bundleIdPrefix: dev.oprimo.poordeck
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "14.2"
   createIntermediateGroups: true
 settings:
   base:
@@ -14,18 +14,18 @@ settings:
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
 targets:
-  WebDeck:
+  PoorDeck:
     type: application
     platform: macOS
     sources:
-      - path: Sources/WebDeck
+      - path: Sources/PoorDeck
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.webdeck.app
-        PRODUCT_NAME: WebDeck
-        INFOPLIST_FILE: Sources/WebDeck/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Sources/WebDeck/WebDeck.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: dev.oprimo.poordeck.app
+        PRODUCT_NAME: PoorDeck
+        INFOPLIST_FILE: Sources/PoorDeck/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/PoorDeck/PoorDeck.entitlements
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
-        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.2"

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App sandbox is off (see project.yml) so this file stays minimal.
+	     audio-input is required for per-app volume: Core Audio process taps
+	     route other apps' audio through us, which counts as capture. The
+	     actual TCC grant happens at runtime the first time the user
+	     adjusts an app's volume, with the NSMicrophoneUsageDescription
+	     string from Info.plist.
+	     accessibility is a TCC prompt, not an entitlement. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

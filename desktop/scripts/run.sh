@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# run.sh — build the Svelte client + the WebDeck macOS app, then launch it.
+# run.sh — build the Svelte client + the PoorDeck macOS app, then launch it.
 #
 # For fast iteration the app is pointed at the client's built `dist/` via the
-# WEBDECK_WEBROOT env var, so you don't need to re-bundle the web assets into
+# POORDECK_WEBROOT env var, so you don't need to re-bundle the web assets into
 # the .app on every change.
 #
 set -euo pipefail
@@ -24,19 +24,19 @@ step "Generating Xcode project"
 cd "${DESKTOP_DIR}"
 xcodegen generate
 
-step "Building WebDeck.app"
+step "Building PoorDeck.app"
 xcodebuild \
-  -project WebDeck.xcodeproj \
-  -scheme WebDeck \
+  -project PoorDeck.xcodeproj \
+  -scheme PoorDeck \
   -configuration Debug \
   -derivedDataPath "${BUILD_DIR}" \
   CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
   build
 
-APP="${BUILD_DIR}/Build/Products/Debug/WebDeck.app"
+APP="${BUILD_DIR}/Build/Products/Debug/PoorDeck.app"
 step "Launching ${APP}"
 # Kill any previous instance so the port frees up.
-pkill -f "WebDeck.app/Contents/MacOS/WebDeck" 2>/dev/null || true
-WEBDECK_WEBROOT="${CLIENT_DIR}/dist" open -n "${APP}" --env WEBDECK_WEBROOT="${CLIENT_DIR}/dist"
+pkill -f "PoorDeck.app/Contents/MacOS/PoorDeck" 2>/dev/null || true
+POORDECK_WEBROOT="${CLIENT_DIR}/dist" open -n "${APP}" --env POORDECK_WEBROOT="${CLIENT_DIR}/dist"
 
-step "WebDeck launched. Look for the grid icon in your menu bar."
+step "PoorDeck launched. Look for the grid icon in your menu bar."

@@ -40,7 +40,7 @@ struct MenuView: View {
             Button {
                 NSApp.terminate(nil)
             } label: {
-                Label("Quit WebDeck", systemImage: "power")
+                Label("Quit PoorDeck", systemImage: "power")
             }
         }
         .padding(14)
