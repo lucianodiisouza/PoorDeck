@@ -133,6 +133,15 @@ function sendDeviceOrientation(): void {
   send({ type: "deviceOrientation", isPortrait });
 }
 
+// Re-send the orientation every time the user rotates the device or
+// resizes the window. The editor's "Follow device" preview mode reads
+// the latest value, so this keeps the canvas in sync without any
+// extra round-trip.
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", sendDeviceOrientation);
+  window.addEventListener("orientationchange", sendDeviceOrientation);
+}
+
 export function press(buttonId: string): void {
   send({ type: "press", buttonId });
 }
