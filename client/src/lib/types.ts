@@ -1,5 +1,5 @@
 // Wire protocol shared with the desktop server. Keep in sync with
-// desktop/Sources/WebDeck/Model/Protocol.swift.
+// desktop/Sources/PoorDeck/Model/Protocol.swift.
 
 export interface Layout {
   pages: Page[];

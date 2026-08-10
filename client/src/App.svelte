@@ -173,7 +173,7 @@
 >
   <header class="bar">
     <span class="dot" class:online={deck.status === "open"}></span>
-    <span class="title">{currentPage?.name ?? "WebDeck"}</span>
+    <span class="title">{currentPage?.name ?? "PoorDeck"}</span>
     <span class="status">
       {#if deck.status === "open"}connected
       {:else if deck.status === "connecting"}connecting…
@@ -272,7 +272,7 @@
     {/if}
   {:else}
     <div class="empty">
-      {#if deck.status === "open"}Waiting for layout…{:else}Connecting to WebDeck…{/if}
+      {#if deck.status === "open"}Waiting for layout…{:else}Connecting to PoorDeck…{/if}
     </div>
   {/if}
 </main>
