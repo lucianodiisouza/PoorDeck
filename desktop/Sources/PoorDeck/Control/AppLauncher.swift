@@ -11,13 +11,13 @@ enum AppLauncher {
     @MainActor
     static func openApp(bundleId: String) -> Bool {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-            NSLog("WebDeck: no app for bundle id \(bundleId)")
+            NSLog("PoorDeck: no app for bundle id \(bundleId)")
             return false
         }
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
         NSWorkspace.shared.openApplication(at: url, configuration: config) { _, error in
-            if let error { NSLog("WebDeck: open failed \(bundleId): \(error)") }
+            if let error { NSLog("PoorDeck: open failed \(bundleId): \(error)") }
         }
         return true
     }

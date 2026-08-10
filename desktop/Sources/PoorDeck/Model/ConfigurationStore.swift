@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 /// Owns the editable `Layout` and persists it as JSON in
-/// `~/Library/Application Support/WebDeck/layout.json`.
+/// `~/Library/Application Support/PoorDeck/layout.json`.
 ///
 /// On first launch the file doesn't exist — we fall back to the bundled
 /// seed and write it out so subsequent runs see the same shape.
@@ -50,7 +50,7 @@ final class ConfigurationStore: ObservableObject {
                                 appropriateFor: nil,
                                 create: true))
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let dir = base.appendingPathComponent("WebDeck", isDirectory: true)
+        let dir = base.appendingPathComponent("PoorDeck", isDirectory: true)
         if !fm.fileExists(atPath: dir.path) {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
@@ -90,7 +90,7 @@ final class ConfigurationStore: ObservableObject {
                 try FileManager.default.moveItem(at: tmp, to: fileURL)
             }
         } catch {
-            NSLog("WebDeck: failed to save layout: \(error)")
+            NSLog("PoorDeck: failed to save layout: \(error)")
         }
     }
 

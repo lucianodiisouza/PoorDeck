@@ -18,11 +18,11 @@ enum KeyEmitter {
     @MainActor
     static func send(_ shortcut: Shortcut, activating bundleId: String?) -> Bool {
         guard isTrusted else {
-            NSLog("WebDeck: keyShortcut blocked — Accessibility not granted")
+            NSLog("PoorDeck: keyShortcut blocked — Accessibility not granted")
             return false
         }
         guard let keyCode = virtualKey(for: shortcut.key) else {
-            NSLog("WebDeck: unknown key '\(shortcut.key)'")
+            NSLog("PoorDeck: unknown key '\(shortcut.key)'")
             return false
         }
         let flags = eventFlags(shortcut.modifiers)

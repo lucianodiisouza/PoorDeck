@@ -161,7 +161,7 @@ struct ConfigView: View {
             Text("Permissions")
                 .font(.title3.bold())
 
-            Text("WebDeck needs two macOS grants. Open System Settings from the buttons below to flip the toggles after the fact.")
+            Text("PoorDeck needs two macOS grants. Open System Settings from the buttons below to flip the toggles after the fact.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

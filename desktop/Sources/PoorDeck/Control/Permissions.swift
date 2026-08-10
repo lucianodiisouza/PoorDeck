@@ -3,7 +3,7 @@ import ApplicationServices
 import Combine
 import SwiftUI
 
-/// Tracks the macOS permissions WebDeck needs:
+/// Tracks the macOS permissions PoorDeck needs:
 /// - **Accessibility**: keyboard-shortcut actions (CGEvent posting).
 /// - **Audio capture** (Microphone TCC): the process-tap engine routes other
 ///   apps' audio through us, which counts as capture, so the user has to
@@ -26,7 +26,7 @@ final class Permissions: ObservableObject {
 
     // MARK: Accessibility
 
-    /// Ask macOS to prompt the user to add WebDeck under
+    /// Ask macOS to prompt the user to add PoorDeck under
     /// System Settings ▸ Privacy & Security ▸ Accessibility.
     func requestAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue()

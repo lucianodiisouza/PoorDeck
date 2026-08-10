@@ -27,7 +27,7 @@ final class AudioProcessController: ObservableObject {
     /// Serial queue for every blocking Core Audio HAL call (enumeration, tap
     /// activation/teardown, leak reaping). Keeps `coreaudiod` round-trips off
     /// the main thread so a slow or wedged HAL never freezes the UI.
-    private let halQueue = DispatchQueue(label: "com.webdeck.hal", qos: .userInitiated)
+    private let halQueue = DispatchQueue(label: "dev.oprimo.poordeck.hal", qos: .userInitiated)
     /// Coalesce reloads: skip a scan if the previous one is still on the HAL queue.
     private var reloadInFlight = false
 
@@ -169,7 +169,7 @@ final class AudioProcessController: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
-        log.info("WebDeck audio controller starting; enumerating audio processes")
+        log.info("PoorDeck audio controller starting; enumerating audio processes")
         // Sweep away any aggregate devices / taps leaked by a previous crash
         // before we start creating new ones — they otherwise pile up in
         // coreaudiod and can wedge the whole audio HAL.

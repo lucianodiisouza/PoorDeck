@@ -7,7 +7,7 @@ import Network
 /// - Serves the built Svelte client (static files) so a phone/tablet just opens
 ///   `http://<mac-ip>:<port>/`.
 /// - Upgrades `/ws` to a WebSocket and speaks the JSON protocol in `Protocol.swift`.
-/// - Advertises itself over Bonjour (`_webdeck._tcp`) for zero-config discovery.
+/// - Advertises itself over Bonjour (`_poordeck._tcp`) for zero-config discovery.
 ///
 /// All Network.framework callbacks run on `queue` (serial), so connection state
 /// is single-threaded; UI-facing `@Published` values are mirrored onto main.
@@ -24,7 +24,7 @@ final class Server: ObservableObject, @unchecked Sendable {
     /// Pairing URL shown in the UI and encoded into the QR code.
     var pairingURL: String { "http://\(host):\(port)" }
 
-    private let queue = DispatchQueue(label: "com.webdeck.server")
+    private let queue = DispatchQueue(label: "dev.oprimo.poordeck.server")
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: NWConnection] = [:]
 
@@ -90,7 +90,7 @@ final class Server: ObservableObject, @unchecked Sendable {
 
     private func tryListen(portIndex: Int) {
         guard portIndex < candidatePorts.count else {
-            NSLog("WebDeck: no free port in \(candidatePorts)")
+            NSLog("PoorDeck: no free port in \(candidatePorts)")
             return
         }
         let wanted = candidatePorts[portIndex]
@@ -98,7 +98,7 @@ final class Server: ObservableObject, @unchecked Sendable {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
             let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: wanted)!)
-            listener.service = NWListener.Service(name: "WebDeck", type: "_webdeck._tcp")
+            listener.service = NWListener.Service(name: "PoorDeck", type: "_poordeck._tcp")
 
             listener.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
@@ -107,10 +107,10 @@ final class Server: ObservableObject, @unchecked Sendable {
                     Task { @MainActor in
                         self.port = wanted
                         self.isRunning = true
-                        NSLog("WebDeck: listening on \(self.pairingURL)")
+                        NSLog("PoorDeck: listening on \(self.pairingURL)")
                     }
                 case .failed(let error):
-                    NSLog("WebDeck: listener failed on \(wanted): \(error)")
+                    NSLog("PoorDeck: listener failed on \(wanted): \(error)")
                     listener.cancel()
                     Task { @MainActor in
                         self.listener = nil
@@ -126,7 +126,7 @@ final class Server: ObservableObject, @unchecked Sendable {
             listener.start(queue: queue)
             self.listener = listener
         } catch {
-            NSLog("WebDeck: could not create listener on \(wanted): \(error)")
+            NSLog("PoorDeck: could not create listener on \(wanted): \(error)")
             tryListen(portIndex: portIndex + 1)
         }
     }
@@ -225,7 +225,7 @@ final class Server: ObservableObject, @unchecked Sendable {
         conn.send(content: Data(handshake.utf8), completion: .contentProcessed { [weak self] error in
             guard let self else { return }
             if let error {
-                NSLog("WebDeck: ws handshake send failed: \(error)")
+                NSLog("PoorDeck: ws handshake send failed: \(error)")
                 conn.cancel()
                 return
             }
@@ -286,7 +286,7 @@ final class Server: ObservableObject, @unchecked Sendable {
         switch frame.opcode {
         case .text:
             guard let message = try? JSONDecoder().decode(ClientMessage.self, from: frame.payload) else {
-                NSLog("WebDeck: undecodable client message")
+                NSLog("PoorDeck: undecodable client message")
                 return
             }
             handle(message, conn: conn)
@@ -302,7 +302,7 @@ final class Server: ObservableObject, @unchecked Sendable {
     private func handle(_ message: ClientMessage, conn: NWConnection) {
         switch message {
         case .hello(let name):
-            NSLog("WebDeck: client said hello (\(name ?? "anon"))")
+            NSLog("PoorDeck: client said hello (\(name ?? "anon"))")
         case .press(let buttonId):
             Task { @MainActor in
                 let button = DeckStore.shared.button(id: buttonId)
@@ -394,7 +394,7 @@ final class Server: ObservableObject, @unchecked Sendable {
     // MARK: Web root + content types
 
     static func webRoot() -> URL {
-        if let override = ProcessInfo.processInfo.environment["WEBDECK_WEBROOT"] {
+        if let override = ProcessInfo.processInfo.environment["POORDECK_WEBROOT"] {
             return URL(fileURLWithPath: override, isDirectory: true)
         }
         return Bundle.main.resourceURL?.appendingPathComponent("web", isDirectory: true)
@@ -422,12 +422,12 @@ final class Server: ObservableObject, @unchecked Sendable {
     static func placeholderPage(pairingURL: String) -> String {
         """
         <!doctype html><meta charset=utf-8>
-        <title>WebDeck</title>
+        <title>PoorDeck</title>
         <body style="font-family:-apple-system,sans-serif;background:#0f1115;color:#e7e9ee;text-align:center;padding:3rem">
-        <h1>WebDeck server is running</h1>
+        <h1>PoorDeck server is running</h1>
         <p>The client bundle isn't built yet.</p>
         <p>Run <code>npm run build</code> in <code>client/</code>, or start with
-        <code>WEBDECK_WEBROOT=…/client/dist</code>.</p>
+        <code>POORDECK_WEBROOT=…/client/dist</code>.</p>
         <p>Paired at <b>\(pairingURL)</b></p>
         </body>
         """

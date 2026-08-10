@@ -83,7 +83,7 @@ final class ProcessTap: @unchecked Sendable {
 
         let aggregateUID = "\(Self.aggregateUIDPrefix)\(process.pid).\(UUID().uuidString)"
         let description2: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "WebDeck \(process.name)",
+            kAudioAggregateDeviceNameKey: "PoorDeck \(process.name)",
             kAudioAggregateDeviceUIDKey: aggregateUID,
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,
@@ -200,9 +200,9 @@ final class ProcessTap: @unchecked Sendable {
 extension ProcessTap {
     /// UID prefix stamped on every aggregate device we create. Used both to build
     /// new ones and to recognise orphans left behind by a previous crash.
-    static let aggregateUIDPrefix = "com.webdeck.aggregate."
+    static let aggregateUIDPrefix = "dev.oprimo.poordeck.aggregate."
     /// Prefix on every process-tap description name we create.
-    static let tapNamePrefix = "WebDeck-"
+    static let tapNamePrefix = "PoorDeck-"
 
     /// Destroy any private aggregate devices / process taps this app leaked in a
     /// prior run (e.g. a crash or force-quit that skipped `teardown`). These

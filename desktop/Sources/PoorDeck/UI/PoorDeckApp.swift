@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct WebDeckApp: App {
+struct PoorDeckApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -18,7 +18,7 @@ struct WebDeckApp: App {
         // once at scene-construction time (not lazily) so the closure
         // captures a stable reference to the AppDelegate and SwiftUI
         // doesn't have to re-resolve nested-type metadata on every reopen.
-        Window("WebDeck", id: WindowID.config) {
+        Window("PoorDeck", id: WindowID.config) {
             ConfigViewHost()
                 .environmentObject(appDelegate.server)
                 .environmentObject(appDelegate.permissions)
