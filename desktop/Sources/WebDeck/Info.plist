@@ -33,5 +33,9 @@
 	<array>
 		<string>_webdeck._tcp</string>
 	</array>
+	<!-- Per-app volume needs to tap other apps' audio. macOS shows this string
+	     in the TCC prompt the first time the user adjusts an app's volume. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WebDeck captures other apps' audio to control their volume individually.</string>
 </dict>
 </plist>

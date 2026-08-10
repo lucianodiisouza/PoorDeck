@@ -2,7 +2,7 @@ name: WebDeck
 options:
   bundleIdPrefix: com.webdeck
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "14.2"
   createIntermediateGroups: true
 settings:
   base:
@@ -28,4 +28,4 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
-        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.2"
