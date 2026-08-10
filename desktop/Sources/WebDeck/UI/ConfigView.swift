@@ -102,6 +102,9 @@ struct ConfigView: View {
                           : Color.clear)
             )
             .foregroundStyle(isActive ? Color.white : Color.primary)
+            // contentShape(Rectangle()) extends the hitbox to the entire
+            // padded area, not just the icon + text pixels.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

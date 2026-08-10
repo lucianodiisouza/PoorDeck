@@ -125,6 +125,8 @@ struct LayoutEditorView: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
             )
+            // Make the whole padded row a hit target, not just the text.
+            .contentShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -140,18 +142,24 @@ struct LayoutEditorView: View {
         }
     }
 
-    // MARK: Button grid
+    // MARK: Canvas (device preview)
+
+    @State private var device: DevicePreview.DeviceFamily = .phone
+    @State private var portrait: Bool = true
 
     private var buttonGrid: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let page = currentPage {
-                HStack {
+                // Page-level controls: name + columns + add button. These
+                // are controls of the page itself, not of the preview, so
+                // they sit above the canvas rather than inside it.
+                HStack(spacing: 12) {
                     TextField("Page name", text: Binding(
                         get: { page.name },
                         set: { store.updatePage(id: page.id, name: $0) }
                     ))
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 240)
+                    .frame(maxWidth: 220)
 
                     Stepper("Cols: \(page.columns)", value: Binding(
                         get: { page.columns },
@@ -178,64 +186,16 @@ struct LayoutEditorView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
 
-                ScrollView {
-                    grid(for: page)
-                        .padding(16)
-                }
+                DevicePreview(
+                    page: page,
+                    device: $device,
+                    portrait: $portrait,
+                    selectedButtonId: selectedButtonId,
+                    onSelect: { id in selectedButtonId = id }
+                )
             } else {
                 ContentUnavailableShim("No page selected",
                                        "Select a page on the left, or add one.")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func grid(for page: Page) -> some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, page.columns))
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(page.buttons) { button in
-                cell(for: button)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func cell(for button: DeckButton) -> some View {
-        let isSelected = selectedButtonId == button.id
-        Button {
-            selectedButtonId = button.id
-        } label: {
-            VStack(spacing: 4) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isSelected ? Color.accentColor.opacity(0.25) : Color.gray.opacity(0.18))
-                    if let icon = button.icon, let nsImage = Self.imageFromDataURL(icon) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .interpolation(.high)
-                            .aspectRatio(contentMode: .fit)
-                            .padding(8)
-                    } else {
-                        Image(systemName: Self.glyph(for: button))
-                            .font(.system(size: 24))
-                            .foregroundStyle(isSelected ? Color.accentColor : .primary)
-                    }
-                }
-                .frame(height: 60)
-                Text(button.label)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-            }
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(role: .destructive) {
-                if let pid = currentPage?.id {
-                    store.deleteButton(pageId: pid, buttonId: button.id)
-                }
-            } label: {
-                Label("Delete", systemImage: "trash")
             }
         }
     }
@@ -278,20 +238,6 @@ struct LayoutEditorView: View {
     }
     private func lastInsertedButtonId(in pageId: String) -> String? {
         store.layout.pages.first(where: { $0.id == pageId })?.buttons.last?.id
-    }
-
-    private static func glyph(for button: DeckButton) -> String {
-        if let s = button.symbol, !s.isEmpty { return s }
-        return button.action.kind == .none ? "questionmark.square" : "app.fill"
-    }
-
-    /// Decode a `data:image/png;base64,...` URL into an NSImage. Used for
-    /// buttons whose `icon` was resolved by the AppLauncher cache.
-    private static func imageFromDataURL(_ s: String) -> NSImage? {
-        guard let comma = s.firstIndex(of: ","),
-              let data = Data(base64Encoded: String(s[s.index(after: comma)...]))
-        else { return nil }
-        return NSImage(data: data)
     }
 }
 
