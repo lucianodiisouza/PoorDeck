@@ -30,6 +30,9 @@ final class Server: ObservableObject, @unchecked Sendable {
     /// System volume bridge — observes the master output device and broadcasts
     /// changes to every connected client.
     private let systemVolume = SystemVolume()
+    /// Per-app audio controller — enumerates processes, runs the tap pipeline,
+    /// and publishes the list of apps currently producing audio.
+    private let audio = AudioProcessController.shared
 
     // MARK: Lifecycle
 
@@ -38,6 +41,7 @@ final class Server: ObservableObject, @unchecked Sendable {
         host = NetworkInfo.primaryIPv4() ?? "localhost"
         tryListen(portIndex: 0)
         startVolumeBridge()
+        startAudioBridge()
     }
 
     private func startVolumeBridge() {
@@ -46,6 +50,24 @@ final class Server: ObservableObject, @unchecked Sendable {
             self.broadcast(.volume(target: .system, value: value))
         }
         systemVolume.startListening()
+    }
+
+    private func startAudioBridge() {
+        // Fan out the full snapshot whenever the controller's published state
+        // changes. Cheap because the controller already coalesces its poll.
+        // The controller is @MainActor; we hop on to mutate it. The callback
+        // dispatches back to the main actor before reading the snapshot, which
+        // is what we want anyway (the controller only mutates on main).
+        Task { @MainActor in
+            self.audio.onChange = { [weak self] in
+                Task { @MainActor in
+                    guard let self else { return }
+                    let list = self.audio.snapshot()
+                    self.broadcast(.apps(list: list))
+                }
+            }
+            self.audio.start()
+        }
     }
 
     private func tryListen(portIndex: Int) {
@@ -204,6 +226,15 @@ final class Server: ObservableObject, @unchecked Sendable {
         if let value = SystemVolume.get() {
             sendServerMessage(.volume(target: .system, value: value), to: conn)
         }
+        // Push the current per-app snapshot so the new client doesn't have
+        // to wait for the next poll tick. Snapshot reads @MainActor state,
+        // so we hop on briefly.
+        Task { @MainActor in
+            let snapshot = self.audio.snapshot()
+            if !snapshot.isEmpty {
+                self.sendServerMessage(.apps(list: snapshot), to: conn)
+            }
+        }
     }
 
     private func unregisterClient(_ conn: NWConnection) {
@@ -281,6 +312,21 @@ final class Server: ObservableObject, @unchecked Sendable {
             switch target {
             case .system:
                 _ = SystemVolume.set(value)
+            }
+        case .setAppVolume(let id, let value, let muted):
+            Task { @MainActor in
+                guard let process = self.audio.process(idString: id) else { return }
+                if muted {
+                    self.audio.toggleMute(process)
+                } else {
+                    self.audio.setVolume(value, for: process)
+                }
+                // Broadcast the resulting level to all clients (including the
+                // sender). The sender drops the echo with its own isEcho
+                // check, so the only effect is keeping other clients in sync.
+                self.broadcast(.appVolume(id: id,
+                                           volume: self.audio.volume(for: process),
+                                           muted: self.audio.isMuted(process)))
             }
         }
     }
