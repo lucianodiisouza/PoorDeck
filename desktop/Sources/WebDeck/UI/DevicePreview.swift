@@ -41,6 +41,7 @@ struct DevicePreview: View {
         VStack(spacing: 16) {
             controls
             deviceFrame
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -81,14 +82,7 @@ struct DevicePreview: View {
             let portraitAspect = aspect.height / aspect.width
             let landscapeAspect = aspect.width / aspect.height
             let target = portrait ? portraitAspect : landscapeAspect
-            // Cap the available size: the editor pane can be very wide,
-            // and a 393x852 device stretched to 1500x3240 looks broken.
-            // 480 is a comfortable cap for both orientations.
-            let cap: CGFloat = 520
-            let available = CGSize(
-                width: min(geo.size.width, cap),
-                height: min(geo.size.height, cap)
-            )
+            let available = geo.size
             let size = sizeThatFits(target: target, in: available)
 
             ZStack {
