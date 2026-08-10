@@ -61,7 +61,8 @@ struct DevicePreview: View {
                     portrait.toggle()
                 }
             } label: {
-                Image(systemName: portrait ? "rectangle.portrait" : "rectangle")
+                Image(systemName: portrait ? "rectangle.landscape" : "rectangle.portrait")
+                    .font(.system(size: 16, weight: .medium))
             }
             .buttonStyle(.borderless)
             .help(portrait ? "Switch to landscape" : "Switch to portrait")

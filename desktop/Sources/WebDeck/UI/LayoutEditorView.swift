@@ -187,7 +187,7 @@ struct LayoutEditorView: View {
                 .padding(.vertical, 14)
 
                 DevicePreview(
-                    page: page,
+                    page: pageWithIcons(page),
                     device: $device,
                     portrait: $portrait,
                     selectedButtonId: selectedButtonId,
@@ -238,6 +238,33 @@ struct LayoutEditorView: View {
     }
     private func lastInsertedButtonId(in pageId: String) -> String? {
         store.layout.pages.first(where: { $0.id == pageId })?.buttons.last?.id
+    }
+
+    /// Resolve the page's buttons to a copy with icons filled in from the
+    /// running apps' icon cache. Without this, the canvas falls back to SF
+    /// Symbols for every cell because the persisted `Layout` doesn't carry
+    /// the resolved icon data URLs.
+    private func pageWithIcons(_ page: Page) -> Page {
+        let resolved = DeckStore.shared.resolvedLayout()
+        guard let resolvedPage = resolved.pages.first(where: { $0.id == page.id }) else {
+            return page
+        }
+        // Merge: use the resolved buttons' icons when the source button
+        // exists in both, but keep the editor's live page as the source of
+        // truth for everything else (label, action, symbol, order).
+        let iconByID = Dictionary(uniqueKeysWithValues:
+            resolvedPage.buttons.map { ($0.id, $0.icon) }
+        )
+        return Page(
+            id: page.id,
+            name: page.name,
+            columns: page.columns,
+            buttons: page.buttons.map { btn in
+                var copy = btn
+                if copy.icon == nil { copy.icon = iconByID[btn.id] ?? nil }
+                return copy
+            }
+        )
     }
 }
 
