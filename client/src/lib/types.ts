@@ -28,10 +28,14 @@ export interface Shortcut {
   modifiers: Modifier[];
 }
 
+export type VolumeTarget = "system";
+
 export interface Action {
-  kind: "openApp" | "keyShortcut" | "none";
+  kind: "openApp" | "keyShortcut" | "volume" | "none";
   bundleId?: string | null;
   shortcut?: Shortcut | null;
+  /** For `volume` controls: which audio target this control drives. */
+  target?: VolumeTarget | null;
 }
 
 export interface Theme {
@@ -45,9 +49,11 @@ export interface Theme {
 // server -> client
 export type ServerMessage =
   | { type: "layout"; data: Layout }
-  | { type: "ack"; buttonId: string; ok: boolean };
+  | { type: "ack"; buttonId: string; ok: boolean }
+  | { type: "volume"; target: VolumeTarget; value: number };
 
 // client -> server
 export type ClientMessage =
   | { type: "hello"; name?: string }
-  | { type: "press"; buttonId: string };
+  | { type: "press"; buttonId: string }
+  | { type: "volume"; target: VolumeTarget; value: number };

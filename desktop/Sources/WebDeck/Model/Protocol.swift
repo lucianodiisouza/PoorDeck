@@ -38,15 +38,25 @@ struct Action: Codable {
     enum Kind: String, Codable {
         case openApp      // launch or bring an app to the front
         case keyShortcut  // post a keyboard shortcut (e.g. ⌘↵)
+        case volume       // a non-tap control bound to system volume
         case none         // placeholder / not wired yet
     }
     var kind: Kind
     /// Bundle id. For `openApp` it's the target; for `keyShortcut` it's an
     /// optional app to bring to the front before the keys are sent (nil = send
-    /// to whatever's already focused).
+    /// to whatever's already focused). Reserved / unused for `volume`.
     var bundleId: String?
     /// The keystroke for `keyShortcut`.
     var shortcut: Shortcut?
+    /// For `volume` controls: which audio target this control drives. Right now
+    /// we only ship `system` (the default output device). Per-app volume needs
+    /// the process-tap engine mentioned in the README and is intentionally not
+    /// modeled yet — `target` is forward-compatible.
+    var target: VolumeTarget?
+}
+
+enum VolumeTarget: String, Codable {
+    case system
 }
 
 /// A keyboard shortcut, described by layout-independent key name + modifiers.
@@ -84,8 +94,13 @@ struct Theme: Codable {
 enum ServerMessage: Codable {
     case layout(Layout)
     case ack(buttonId: String, ok: Bool)
+    /// Current system volume (0…1). Pushed on connect and whenever the value
+    /// changes from any source (slider on the client, macOS menu bar, keys).
+    case volume(target: VolumeTarget, value: Float)
 
-    private enum CodingKeys: String, CodingKey { case type, data, buttonId, ok }
+    private enum CodingKeys: String, CodingKey {
+        case type, data, buttonId, ok, target, value
+    }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -97,6 +112,10 @@ enum ServerMessage: Codable {
             try c.encode("ack", forKey: .type)
             try c.encode(buttonId, forKey: .buttonId)
             try c.encode(ok, forKey: .ok)
+        case .volume(let target, let value):
+            try c.encode("volume", forKey: .type)
+            try c.encode(target, forKey: .target)
+            try c.encode(value, forKey: .value)
         }
     }
 
@@ -106,6 +125,8 @@ enum ServerMessage: Codable {
         case "layout": self = .layout(try c.decode(Layout.self, forKey: .data))
         case "ack": self = .ack(buttonId: try c.decode(String.self, forKey: .buttonId),
                                 ok: try c.decode(Bool.self, forKey: .ok))
+        case "volume": self = .volume(target: try c.decode(VolumeTarget.self, forKey: .target),
+                                      value: try c.decode(Float.self, forKey: .value))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown server message")
         }
@@ -116,14 +137,21 @@ enum ServerMessage: Codable {
 enum ClientMessage: Decodable {
     case hello(name: String?)
     case press(buttonId: String)
+    /// Continuous control input. `volume` updates the given target to `value`
+    /// (0…1) and is fire-and-forget — there's no per-message ack; the server
+    /// broadcasts the new level back so all clients stay in sync.
+    case volume(target: VolumeTarget, value: Float)
 
-    private enum CodingKeys: String, CodingKey { case type, name, buttonId }
+    private enum CodingKeys: String, CodingKey { case type, name, buttonId, target, value }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
         case "hello": self = .hello(name: try c.decodeIfPresent(String.self, forKey: .name))
         case "press": self = .press(buttonId: try c.decode(String.self, forKey: .buttonId))
+        case "volume":
+            self = .volume(target: try c.decode(VolumeTarget.self, forKey: .target),
+                           value: try c.decode(Float.self, forKey: .value))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown client message")
         }
