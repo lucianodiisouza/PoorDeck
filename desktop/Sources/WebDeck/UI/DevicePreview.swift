@@ -34,22 +34,19 @@ struct DevicePreview: View {
     /// is what the user wants when they're actively testing on a
     /// real phone: rotate the phone, the preview rotates to match.
     @Binding var followDevice: Bool
-    /// Last orientation reported by any client. Read only when
-    /// `followDevice` is true.
-    let serverDeviceOrientationIsPortrait: Bool
+    @EnvironmentObject private var server: Server
     let selectedButtonId: String?
     let onSelect: (String) -> Void
 
-    /// Effective orientation the preview should render, taking the
-    /// page's `orientationLock` and (when active) the device's
-    /// reported orientation into account. When the lock is set,
-    /// it overrides both the toggle and the device.
+    /// Effective orientation the preview should render. The page's
+    /// `orientationLock` is a runtime constraint for the *real client*
+    /// (it tells the phone to hold this orientation); it doesn't pin
+    /// the editor preview, so the user can still see how the page
+    /// looks in both orientations before deciding to lock it. The
+    /// "Locked to X" badge in the controls bar makes the lock visible.
     private var effectivePortrait: Bool {
-        if let lock = page.orientationLock {
-            return lock == .portrait
-        }
         if followDevice {
-            return serverDeviceOrientationIsPortrait
+            return server.lastDeviceOrientationIsPortrait
         }
         return portrait
     }
@@ -79,29 +76,23 @@ struct DevicePreview: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 220)
 
-            if let lock = page.orientationLock {
-                // Locked: show the locked orientation and let the user
-                // know why their toggle is greyed out.
-                Label(lock.rawValue.capitalized, systemImage: "lock")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-                    .help("Page is locked to \(lock.rawValue) — edit the page to unlock.")
-            } else {
-                Button {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        portrait.toggle()
-                    }
-                } label: {
-                    Image(systemName: portrait ? "rectangle.landscape" : "rectangle.portrait")
-                        .font(.system(size: 16, weight: .medium))
+            // Manual orientation toggle for the preview. The page's
+            // orientationLock doesn't disable this — the lock is a
+            // *client* runtime constraint, the editor still wants to
+            // see what the page looks like in both orientations.
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    portrait.toggle()
                 }
-                .buttonStyle(.borderless)
-                .disabled(followDevice)
-                .help(followDevice
-                      ? "Follow device is on — turn it off to use the manual toggle"
-                      : (portrait ? "Switch to landscape" : "Switch to portrait"))
+            } label: {
+                Image(systemName: portrait ? "rectangle.landscape" : "rectangle.portrait")
+                    .font(.system(size: 16, weight: .medium))
             }
+            .buttonStyle(.borderless)
+            .disabled(followDevice)
+            .help(followDevice
+                  ? "Follow device is on — turn it off to use the manual toggle"
+                  : (portrait ? "Switch to landscape" : "Switch to portrait"))
 
             Toggle(isOn: $followDevice) {
                 Label("Follow", systemImage: followDevice
@@ -111,6 +102,24 @@ struct DevicePreview: View {
             .toggleStyle(.button)
             .controlSize(.small)
             .help("Mirror the orientation of the most recently connected device")
+
+            if let lock = page.orientationLock {
+                // Show the lock as a badge so the user remembers the
+                // page is locked even though the preview can render
+                // either way. The page-level lock field above is the
+                // source of truth — this is just a reminder that
+                // what they see in the preview may differ from what
+                // the client will render.
+                Label("Locked to \(lock.rawValue.capitalized)", systemImage: "lock.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(Color.accentColor.opacity(0.15))
+                    )
+                    .help("This page is locked to \(lock.rawValue) on the client. The preview still shows the orientation above.")
+            }
 
             Spacer()
         }

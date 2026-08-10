@@ -204,7 +204,6 @@ struct LayoutEditorView: View {
                     device: $device,
                     portrait: $portrait,
                     followDevice: $followDevice,
-                    serverDeviceOrientationIsPortrait: server.lastDeviceOrientationIsPortrait,
                     selectedButtonId: selectedButtonId,
                     onSelect: { id in selectedButtonId = id }
                 )

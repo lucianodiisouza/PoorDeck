@@ -129,7 +129,18 @@ function send(message: ClientMessage): void {
 
 function sendDeviceOrientation(): void {
   if (typeof window === "undefined") return;
-  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  // `screen.orientation.type` is the reliable API on iOS Safari — the
+  // `(orientation: portrait)` media query is unreliable on iOS (Safari
+  // sometimes keeps reporting portrait regardless of actual orientation
+  // and only fires `orientationchange` on full flips). Fall back to the
+  // media query on browsers that don't expose `screen.orientation`.
+  let isPortrait: boolean;
+  const so = (screen as Screen & { orientation?: { type: string } }).orientation;
+  if (so?.type) {
+    isPortrait = so.type.startsWith("portrait");
+  } else {
+    isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  }
   send({ type: "deviceOrientation", isPortrait });
 }
 
@@ -140,6 +151,11 @@ function sendDeviceOrientation(): void {
 if (typeof window !== "undefined") {
   window.addEventListener("resize", sendDeviceOrientation);
   window.addEventListener("orientationchange", sendDeviceOrientation);
+  // `screen.orientation` fires its own change event with the resolved
+  // type — most reliable on iOS Safari, where the resize event can be
+  // debounced or skipped during a rotation animation.
+  const so = (screen as Screen & { orientation?: EventTarget }).orientation;
+  so?.addEventListener?.("change", sendDeviceOrientation);
 }
 
 export function press(buttonId: string): void {

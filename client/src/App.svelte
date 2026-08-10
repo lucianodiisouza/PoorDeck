@@ -45,8 +45,11 @@
     return currentPage.columns;
   });
 
-  // True when the rendered orientation doesn't match the device's
-  // actual orientation — used to nudge the user to rotate.
+  // True when the device is being held the wrong way relative to the
+  // page's lock. We use this only to show a non-blocking hint when
+  // the Screen Orientation API couldn't enforce the lock (older
+  // Safari, missing permission). The actual lock attempt happens in
+  // an effect below.
   const orientationMismatch = $derived.by(() => {
     if (!currentPage?.orientationLock) return false;
     return currentPage.orientationLock === "portrait"
@@ -102,6 +105,34 @@
     root.setProperty("--wd-radius", `${theme.radius}px`);
   });
 
+  // Enforce the page's orientation lock on the device itself. Safari
+  // 16.4+ supports `screen.orientation.lock()` but it (a) requires a
+  // user gesture in some contexts and (b) only takes effect if the
+  // user grants the permission. We attempt it; on failure (older
+  // Safari, denial) the `orientationMismatch` hint above tells the
+  // user to rotate. We never rotate the content — the page renders
+  // in the locked orientation and the user has to hold the device
+  // the right way.
+  $effect(() => {
+    if (typeof screen === "undefined") return;
+    const lock = currentPage?.orientationLock;
+    const so = (screen as Screen & {
+      orientation?: {
+        lock?: (o: "portrait" | "landscape" | "any") => Promise<void>;
+        unlock?: () => void;
+      };
+    }).orientation;
+    if (!so) return;
+    if (lock) {
+      // Fire-and-forget; promise rejection (e.g. Safari pre-16.4, or
+      // permission denied) just leaves the page in the device's
+      // natural orientation and surfaces the hint.
+      so.lock?.(lock).catch(() => {});
+    } else {
+      so.unlock?.();
+    }
+  });
+
   // Clamp the page index if the layout shrinks.
   $effect(() => {
     if (pageIndex > pages.length - 1) pageIndex = Math.max(0, pages.length - 1);
@@ -137,7 +168,6 @@
 
 <main
   class="deck"
-  class:lock-rotated={currentPage?.orientationLock != null && orientationMismatch}
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
 >
@@ -145,17 +175,34 @@
     <span class="dot" class:online={deck.status === "open"}></span>
     <span class="title">{currentPage?.name ?? "WebDeck"}</span>
     <span class="status">
-      {#if orientationMismatch}
-        <span class="rotate-hint">
-          ↻ rotate to {currentPage?.orientationLock}
-        </span>
-      {:else if deck.status === "open"}connected
+      {#if deck.status === "open"}connected
       {:else if deck.status === "connecting"}connecting…
       {:else}reconnecting…{/if}
     </span>
   </header>
 
   {#if currentPage}
+    {#if orientationMismatch}
+      <div class="rotate-overlay" role="status">
+        <div class="rotate-card">
+          <div class="rotate-icon">
+            {#if currentPage.orientationLock === "portrait"}
+              <span class="phone-portrait">📱</span>
+              <span class="arrow">↻</span>
+            {:else}
+              <span class="phone-landscape">📱</span>
+              <span class="arrow">↻</span>
+            {/if}
+          </div>
+          <div class="rotate-text">
+            Rotate to <b>{currentPage.orientationLock}</b>
+          </div>
+          <div class="rotate-sub">
+            This page is locked to {currentPage.orientationLock}.
+          </div>
+        </div>
+      </div>
+    {/if}
     {#if isVolumePage}
       <!-- Custom render for the Volume page: master on top, then a
            live-updating list of apps. The list is dynamic (apps appear when
@@ -238,19 +285,6 @@
     padding: 14px;
     gap: 12px;
     transform-origin: center center;
-    transition: transform 0.2s ease-out;
-  }
-  .deck.lock-rotated {
-    /* The page is orientation-locked, but the user is holding the
-       device the other way. Rotate the entire deck so the content
-       still reads the locked orientation. Sized to fit the viewport
-       so nothing clips. */
-    position: fixed;
-    inset: 0;
-    width: 100vh;
-    height: 100vw;
-    transform: translate(calc((100vw - 100vh) / 2), calc((100vh - 100vw) / 2)) rotate(90deg);
-    transform-origin: center center;
   }
 
   .bar {
@@ -276,10 +310,6 @@
     margin-left: auto;
     color: color-mix(in srgb, var(--wd-text) 55%, transparent);
     font-size: 13px;
-  }
-  .rotate-hint {
-    color: var(--wd-accent);
-    font-weight: 600;
   }
 
   .grid {
@@ -376,6 +406,53 @@
     display: grid;
     place-items: center;
     color: color-mix(in srgb, var(--wd-text) 55%, transparent);
+  }
+
+  /* Shown when the page is locked to an orientation and the user
+     is holding the device the other way. The screen-orientation
+     lock attempt happens in an effect above; if it failed (older
+     Safari, permission denied) this is the fallback. Non-blocking
+     so the user can still see the deck behind it. */
+  .rotate-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .rotate-card {
+    pointer-events: auto;
+    background: color-mix(in srgb, var(--wd-bg) 80%, transparent);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid color-mix(in srgb, var(--wd-text) 12%, transparent);
+    border-radius: 18px;
+    padding: 18px 22px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    max-width: 80%;
+  }
+  .rotate-icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .rotate-icon .arrow {
+    color: var(--wd-accent);
+    font-size: 28px;
+  }
+  .rotate-text {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .rotate-sub {
+    font-size: 12px;
+    color: color-mix(in srgb, var(--wd-text) 60%, transparent);
   }
 
   /* ---- Volume page ---- */
