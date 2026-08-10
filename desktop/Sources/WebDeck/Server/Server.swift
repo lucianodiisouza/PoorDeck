@@ -42,6 +42,21 @@ final class Server: ObservableObject, @unchecked Sendable {
         tryListen(portIndex: 0)
         startVolumeBridge()
         startAudioBridge()
+        startLayoutBridge()
+    }
+
+    /// Re-broadcast the layout to every connected client when the
+    /// `ConfigurationStore` mutates. The store fires this from the editor's
+    /// add / update / delete actions; we just fan it out.
+    private func startLayoutBridge() {
+        Task { @MainActor in
+            DeckStore.shared.onLayoutChange { [weak self] in
+                guard let self else { return }
+                DeckStore.shared.refresh()
+                let layout = DeckStore.shared.resolvedLayout()
+                self.broadcast(.layout(layout))
+            }
+        }
     }
 
     private func startVolumeBridge() {
