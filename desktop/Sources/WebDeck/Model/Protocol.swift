@@ -37,11 +37,28 @@ struct DeckButton: Codable {
 struct Action: Codable {
     enum Kind: String, Codable {
         case openApp      // launch or bring an app to the front
+        case keyShortcut  // post a keyboard shortcut (e.g. ⌘↵)
         case none         // placeholder / not wired yet
     }
     var kind: Kind
-    /// Bundle id for `openApp`.
+    /// Bundle id. For `openApp` it's the target; for `keyShortcut` it's an
+    /// optional app to bring to the front before the keys are sent (nil = send
+    /// to whatever's already focused).
     var bundleId: String?
+    /// The keystroke for `keyShortcut`.
+    var shortcut: Shortcut?
+}
+
+/// A keyboard shortcut, described by layout-independent key name + modifiers.
+/// e.g. ⌘↵ = Shortcut(key: "return", modifiers: [.command]).
+struct Shortcut: Codable {
+    enum Modifier: String, Codable {
+        case command, shift, option, control
+    }
+    /// Key name resolved to a virtual keycode by `KeyEmitter` (letters, digits,
+    /// "return", "space", "tab", "escape", arrows, "f1"…"f12", etc.).
+    var key: String
+    var modifiers: [Modifier]
 }
 
 struct Theme: Codable {
