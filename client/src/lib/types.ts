@@ -21,9 +21,17 @@ export interface Button {
   action: Action;
 }
 
+export type Modifier = "command" | "shift" | "option" | "control";
+
+export interface Shortcut {
+  key: string;
+  modifiers: Modifier[];
+}
+
 export interface Action {
-  kind: "openApp" | "none";
+  kind: "openApp" | "keyShortcut" | "none";
   bundleId?: string | null;
+  shortcut?: Shortcut | null;
 }
 
 export interface Theme {
