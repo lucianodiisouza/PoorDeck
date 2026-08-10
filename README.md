@@ -40,7 +40,8 @@ This first cut proves the risky end-to-end path:
 - [x] Tap a button → open / switch the target Mac app (with its real icon)
 - [x] Swipe between pages
 - [x] Keyboard-shortcut actions (CGEvent + Accessibility)
-- [ ] Per-app volume sliders / knobs — reuse the `voulum` process-tap engine
+- [x] System volume slider + mute (master output, live updates both ways)
+- [ ] Per-app volume sliders / knobs — reuse the [Voulum](https://github.com/lucianodiisouza/voulum) process-tap engine
 - [ ] Page / button / theme editors in the desktop config window
 - [ ] Persisted configuration
 
