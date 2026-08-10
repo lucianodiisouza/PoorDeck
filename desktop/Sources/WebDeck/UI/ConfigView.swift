@@ -1,21 +1,36 @@
 import SwiftUI
 
-/// The configuration window opened from the menu bar. For the spike it shows the
-/// pairing panel (QR + URL) and the current status. The page/button/theme
-/// editors land here next.
+/// The configuration window opened from the menu bar. Hosts a sidebar
+/// with section routing (Pairing / Pages / Permissions) and the matching
+/// detail view.
 struct ConfigView: View {
     @EnvironmentObject private var server: Server
     @EnvironmentObject private var permissions: Permissions
+    @ObservedObject private var config = ConfigurationStore.shared
+
+    enum Section: String, CaseIterable, Identifiable {
+        case pairing = "Pairing"
+        case pages = "Pages"
+        case permissions = "Permissions"
+        var id: String { rawValue }
+        var icon: String {
+            switch self {
+            case .pairing: return "qrcode"
+            case .pages: return "square.grid.2x2"
+            case .permissions: return "lock.shield"
+            }
+        }
+    }
+
+    @State private var section: Section = .pairing
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             sidebar
             Divider()
-            pairingPanel
+            detail
         }
-        .frame(width: 720, height: 460)
-        // Re-check the Accessibility grant whenever the window regains focus,
-        // so granting it in System Settings reflects here without a relaunch.
+        .frame(minWidth: 880, minHeight: 540)
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didBecomeActiveNotification)) { _ in
             permissions.refresh()
@@ -23,25 +38,40 @@ struct ConfigView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("WebDeck")
-                .font(.title2.bold())
-            Text("Configuration")
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("WebDeck")
+                    .font(.title2.bold())
+                Text("Configuration")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 20)
 
-            Spacer().frame(height: 20)
-
-            Label("Pairing", systemImage: "qrcode")
-                .font(.headline)
-            Label("Pages", systemImage: "square.grid.2x2")
-                .foregroundStyle(.secondary)
-            Label("Themes", systemImage: "paintpalette")
-                .foregroundStyle(.secondary)
+            ForEach(Section.allCases) { s in
+                Button {
+                    section = s
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: s.icon)
+                            .frame(width: 18)
+                        Text(s.rawValue)
+                            .fontWeight(section == s ? .semibold : .regular)
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(section == s
+                                  ? Color.accentColor.opacity(0.18)
+                                  : Color.clear)
+                    )
+                    .foregroundStyle(section == s ? Color.accentColor : Color.primary)
+                }
+                .buttonStyle(.plain)
+            }
 
             Spacer()
-
-            accessibilityStatus
-            audioStatus
 
             HStack(spacing: 6) {
                 Circle()
@@ -56,60 +86,16 @@ struct ConfigView: View {
         .frame(width: 200, alignment: .leading)
     }
 
-    /// Per-permission status block: a checkmark/triangle row plus either a
-    /// "granted" caption or a brief explanation + Grant / Settings buttons.
-    private func permissionRow(
-        granted: Bool,
-        title: String,
-        grantedCaption: String,
-        deniedCaption: String,
-        grant: @escaping () -> Void,
-        openSettings: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: granted
-                      ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(granted ? .green : .orange)
-                Text(title)
-                    .font(.caption.bold())
-            }
-            Text(granted ? grantedCaption : deniedCaption)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if !granted {
-                HStack(spacing: 8) {
-                    Button("Grant…", action: grant)
-                        .controlSize(.small)
-                    Button("Settings", action: openSettings)
-                        .controlSize(.small)
-                }
-            }
+    @ViewBuilder
+    private var detail: some View {
+        switch section {
+        case .pairing:
+            pairingPanel
+        case .pages:
+            LayoutEditorView(store: config)
+        case .permissions:
+            permissionsPanel
         }
-        .padding(.bottom, 8)
-    }
-
-    private var accessibilityStatus: some View {
-        permissionRow(
-            granted: permissions.accessibilityGranted,
-            title: "Accessibility",
-            grantedCaption: "Keyboard shortcuts enabled",
-            deniedCaption: "Needed for keyboard-shortcut buttons",
-            grant: permissions.requestAccessibility,
-            openSettings: permissions.openAccessibilitySettings
-        )
-    }
-
-    private var audioStatus: some View {
-        permissionRow(
-            granted: permissions.audioGranted,
-            title: "Audio capture",
-            grantedCaption: "Per-app volume control enabled",
-            deniedCaption: "Needed to control the volume of each app individually",
-            grant: permissions.requestAudio,
-            openSettings: permissions.openAudioSettings
-        )
     }
 
     private var pairingPanel: some View {
@@ -145,5 +131,76 @@ struct ConfigView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+    }
+
+    private var permissionsPanel: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Permissions")
+                .font(.title3.bold())
+
+            Text("WebDeck needs two macOS grants. Open System Settings from the buttons below to flip the toggles after the fact.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            permissionRow(
+                granted: permissions.accessibilityGranted,
+                title: "Accessibility",
+                grantedCaption: "Keyboard shortcuts enabled",
+                deniedCaption: "Needed for keyboard-shortcut buttons (CGEvent posting).",
+                grant: permissions.requestAccessibility,
+                openSettings: permissions.openAccessibilitySettings
+            )
+
+            permissionRow(
+                granted: permissions.audioGranted,
+                title: "Audio capture",
+                grantedCaption: "Per-app volume control enabled",
+                deniedCaption: "Needed to control the volume of each app individually (process tap).",
+                grant: permissions.requestAudio,
+                openSettings: permissions.openAudioSettings
+            )
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(24)
+    }
+
+    /// Per-permission status block: a checkmark/triangle row plus either a
+    /// "granted" caption or a brief explanation + Grant / Settings buttons.
+    private func permissionRow(
+        granted: Bool,
+        title: String,
+        grantedCaption: String,
+        deniedCaption: String,
+        grant: @escaping () -> Void,
+        openSettings: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: granted
+                      ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(granted ? .green : .orange)
+                    .font(.title3)
+                Text(title)
+                    .font(.headline)
+            }
+            Text(granted ? grantedCaption : deniedCaption)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !granted {
+                HStack(spacing: 8) {
+                    Button("Grant…", action: grant)
+                    Button("Open Settings", action: openSettings)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.gray.opacity(0.08))
+        )
     }
 }

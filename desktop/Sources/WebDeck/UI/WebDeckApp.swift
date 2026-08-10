@@ -14,13 +14,31 @@ struct WebDeckApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        // Opened on demand from the menu ("Open configuration…").
+        // Opened on demand from the menu ("Open configuration…"). Built
+        // once at scene-construction time (not lazily) so the closure
+        // captures a stable reference to the AppDelegate and SwiftUI
+        // doesn't have to re-resolve nested-type metadata on every reopen.
         Window("WebDeck", id: WindowID.config) {
-            ConfigView()
+            ConfigViewHost()
                 .environmentObject(appDelegate.server)
                 .environmentObject(appDelegate.permissions)
         }
         .windowResizability(.contentSize)
+    }
+}
+
+/// Tiny stand-in so the Window scene's content closure is a single,
+/// non-nested-type view — avoids a `ConfigView.Section` metadata crash
+/// when the body is rebuilt by SwiftUI on macOS 14.2 with a Section enum
+/// nested inside the view type.
+private struct ConfigViewHost: View {
+    @EnvironmentObject private var server: Server
+    @EnvironmentObject private var permissions: Permissions
+
+    var body: some View {
+        ConfigView()
+            .environmentObject(server)
+            .environmentObject(permissions)
     }
 }
 
