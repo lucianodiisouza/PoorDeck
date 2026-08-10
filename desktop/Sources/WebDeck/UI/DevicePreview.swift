@@ -32,6 +32,18 @@ struct DevicePreview: View {
     let selectedButtonId: String?
     let onSelect: (String) -> Void
 
+    /// Effective orientation the preview should render, taking the
+    /// page's `orientationLock` into account. When the lock is set,
+    /// it overrides the user's toggle so the preview always shows
+    /// what the user will see on a device that's actually held the
+    /// locked way.
+    private var effectivePortrait: Bool {
+        if let lock = page.orientationLock {
+            return lock == .portrait
+        }
+        return portrait
+    }
+
     /// Size of the preview frame in points, after clamping to the
     /// available space. The outer canvas pads to half this on the
     /// short axis so the device sits centered with breathing room.
@@ -57,16 +69,26 @@ struct DevicePreview: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 220)
 
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    portrait.toggle()
+            if let lock = page.orientationLock {
+                // Locked: show the locked orientation and let the user
+                // know why their toggle is greyed out.
+                Label(lock.rawValue.capitalized, systemImage: "lock")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+                    .help("Page is locked to \(lock.rawValue) — edit the page to unlock.")
+            } else {
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        portrait.toggle()
+                    }
+                } label: {
+                    Image(systemName: portrait ? "rectangle.landscape" : "rectangle.portrait")
+                        .font(.system(size: 16, weight: .medium))
                 }
-            } label: {
-                Image(systemName: portrait ? "rectangle.landscape" : "rectangle.portrait")
-                    .font(.system(size: 16, weight: .medium))
+                .buttonStyle(.borderless)
+                .help(portrait ? "Switch to landscape" : "Switch to portrait")
             }
-            .buttonStyle(.borderless)
-            .help(portrait ? "Switch to landscape" : "Switch to portrait")
 
             Spacer()
         }
@@ -81,37 +103,39 @@ struct DevicePreview: View {
             let aspect = device.aspect
             let portraitAspect = aspect.height / aspect.width
             let landscapeAspect = aspect.width / aspect.height
-            let target = portrait ? portraitAspect : landscapeAspect
+            let isPortrait = effectivePortrait
+            let target = isPortrait ? portraitAspect : landscapeAspect
             let available = geo.size
             let size = sizeThatFits(target: target, in: available)
 
             ZStack {
                 // Drop shadow + body
-                RoundedRectangle(cornerRadius: portrait ? 36 : 24, style: .continuous)
+                RoundedRectangle(cornerRadius: isPortrait ? 36 : 24, style: .continuous)
                     .fill(Color.black)
                     .shadow(color: .black.opacity(0.45), radius: 24, x: 0, y: 12)
                     .overlay(
-                        RoundedRectangle(cornerRadius: portrait ? 36 : 24, style: .continuous)
+                        RoundedRectangle(cornerRadius: isPortrait ? 36 : 24, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                     )
 
                 // Bezel (the rim between the device body and the screen)
-                RoundedRectangle(cornerRadius: portrait ? 32 : 20, style: .continuous)
+                RoundedRectangle(cornerRadius: isPortrait ? 32 : 20, style: .continuous)
                     .fill(Color(red: 0.06, green: 0.07, blue: 0.09))
-                    .padding(portrait ? 6 : 5)
+                    .padding(isPortrait ? 6 : 5)
 
                 // Screen content — clipped to the device body so the grid
                 // can't escape the bezel.
                 screen(size: size)
-                    .padding(portrait ? 10 : 8)
+                    .padding(isPortrait ? 10 : 8)
             }
             .frame(width: size.width, height: size.height)
         }
     }
 
     private func screen(size: CGSize) -> some View {
-        let screenWidth = size.width - (portrait ? 24 : 20)
-        let screenHeight = size.height - (portrait ? 24 : 20)
+        let isPortrait = effectivePortrait
+        let screenWidth = size.width - (isPortrait ? 24 : 20)
+        let screenHeight = size.height - (isPortrait ? 24 : 20)
         // Reserve space at the top (status bar + page chrome) and the
         // bottom (page dots + home indicator) so the grid gets a known
         // height to fit itself into.
