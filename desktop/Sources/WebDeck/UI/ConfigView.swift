@@ -27,7 +27,6 @@ struct ConfigView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            Divider()
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -38,56 +37,71 @@ struct ConfigView: View {
         }
     }
 
-    /// iPadOS-style top tab bar. Fills the full window width and uses a
-    /// glassy background to match the macOS 14+ segmented look. Each tab
-    /// is a single tap; the active one picks up the accent tint.
+    /// Centered floating tab bar with a glassy material — modeled on the
+    /// iPadOS segmented control. The tabs sit in a Capsule floating on
+    /// top of an empty bar; the status dot lives in the far right so
+    /// it's visible without competing with the tab bar.
     private var topBar: some View {
-        HStack(spacing: 4) {
+        ZStack {
+            HStack {
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(server.isRunning ? .green : .orange)
+                        .frame(width: 6, height: 6)
+                    Text(server.isRunning ? "Running" : "Starting…")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.trailing, 16)
+            }
+            tabBar
+        }
+        .frame(height: 56)
+        .background(.bar)
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 2) {
             ForEach(Section.allCases) { s in
                 tabButton(for: s)
             }
-            Spacer()
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(server.isRunning ? .green : .orange)
-                    .frame(width: 7, height: 7)
-                Text(server.isRunning ? "Running" : "Starting…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.bar)
+        .padding(4)
+        .background(
+            Capsule()
+                .fill(.thinMaterial)
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
     }
 
     private func tabButton(for s: Section) -> some View {
         let isActive = section == s
         return Button {
-            section = s
+            withAnimation(.easeOut(duration: 0.18)) {
+                section = s
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: s.icon)
+                    .font(.system(size: 12, weight: .medium))
                 Text(s.rawValue)
                     .fontWeight(isActive ? .semibold : .regular)
             }
             .font(.callout)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
             .background(
                 Capsule()
                     .fill(isActive
-                          ? Color.accentColor.opacity(0.22)
+                          ? Color.accentColor
                           : Color.clear)
             )
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        isActive ? Color.accentColor.opacity(0.4) : Color.gray.opacity(0.18),
-                        lineWidth: 1
-                    )
-            )
-            .foregroundStyle(isActive ? Color.accentColor : Color.primary)
+            .foregroundStyle(isActive ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
     }

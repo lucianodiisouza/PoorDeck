@@ -91,35 +91,52 @@ struct LayoutEditorView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 
-            Divider()
-
-            List(selection: $selectedPageId) {
-                ForEach(store.layout.pages) { page in
-                    HStack {
-                        Image(systemName: "square.grid.2x2")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 16)
-                        Text(page.name)
-                        Spacer()
-                        Text("\(page.buttons.count)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                    }
-                    .tag(page.id)
-                    .contextMenu {
-                        if page.id != "p4" {
-                            Button(role: .destructive) {
-                                store.deletePage(id: page.id)
-                            } label: {
-                                Label("Delete page", systemImage: "trash")
-                            }
-                        } else {
-                            Text("The Volume page is built-in and can't be removed.")
-                        }
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(store.layout.pages) { page in
+                        pageRow(for: page)
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
             }
-            .listStyle(.sidebar)
+        }
+    }
+
+    private func pageRow(for page: Page) -> some View {
+        let isSelected = selectedPageId == page.id
+        return Button {
+            selectedPageId = page.id
+        } label: {
+            HStack {
+                Image(systemName: "square.grid.2x2")
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .frame(width: 16)
+                Text(page.name)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                Spacer()
+                Text("\(page.buttons.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if page.id != "p4" {
+                Button(role: .destructive) {
+                    store.deletePage(id: page.id)
+                } label: {
+                    Label("Delete page", systemImage: "trash")
+                }
+            } else {
+                Text("The Volume page is built-in and can't be removed.")
+            }
         }
     }
 
@@ -159,9 +176,7 @@ struct LayoutEditorView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-
-                Divider()
+                .padding(.vertical, 14)
 
                 ScrollView {
                     grid(for: page)
