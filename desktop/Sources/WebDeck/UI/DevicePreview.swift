@@ -88,31 +88,31 @@ struct DevicePreview: View {
                 // Drop shadow + body
                 RoundedRectangle(cornerRadius: portrait ? 36 : 24, style: .continuous)
                     .fill(Color.black)
-                    .frame(width: size.width, height: size.height)
                     .shadow(color: .black.opacity(0.45), radius: 24, x: 0, y: 12)
                     .overlay(
                         RoundedRectangle(cornerRadius: portrait ? 36 : 24, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                     )
 
-                // Screen bezel
+                // Bezel (the rim between the device body and the screen)
                 RoundedRectangle(cornerRadius: portrait ? 32 : 20, style: .continuous)
                     .fill(Color(red: 0.06, green: 0.07, blue: 0.09))
-                    .padding(portrait ? 10 : 8)
+                    .padding(portrait ? 6 : 5)
 
-                // Screen content
+                // Screen content — clipped to the device body so the grid
+                // can't escape the bezel.
                 screen(size: size)
-                    .padding(portrait ? 14 : 12)
+                    .padding(portrait ? 10 : 8)
             }
+            .frame(width: size.width, height: size.height)
             .frame(width: available.width, height: available.height)
         }
     }
 
-    @ViewBuilder
     private func screen(size: CGSize) -> some View {
         let screenWidth = size.width - (portrait ? 28 : 24)
         let screenHeight = size.height - (portrait ? 28 : 24)
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             // Fake status bar
             HStack {
                 Text("9:41")
@@ -167,6 +167,8 @@ struct DevicePreview: View {
                 .frame(width: max(40, screenWidth * 0.3), height: 4)
                 .padding(.bottom, max(4, screenHeight * 0.012))
         }
+        .frame(width: screenWidth, height: screenHeight)
+        .clipped()
     }
 
     @ViewBuilder
@@ -183,6 +185,8 @@ struct DevicePreview: View {
                 previewCell(for: button, side: cellWidth)
             }
         }
+        .frame(width: screenWidth, alignment: .top)
+        .clipped()
     }
 
     private func previewCell(for button: DeckButton, side: CGFloat) -> some View {
