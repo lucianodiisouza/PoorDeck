@@ -137,6 +137,7 @@
 
 <main
   class="deck"
+  class:lock-rotated={currentPage?.orientationLock != null && orientationMismatch}
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
 >
@@ -236,6 +237,20 @@
     height: 100%;
     padding: 14px;
     gap: 12px;
+    transform-origin: center center;
+    transition: transform 0.2s ease-out;
+  }
+  .deck.lock-rotated {
+    /* The page is orientation-locked, but the user is holding the
+       device the other way. Rotate the entire deck so the content
+       still reads the locked orientation. Sized to fit the viewport
+       so nothing clips. */
+    position: fixed;
+    inset: 0;
+    width: 100vh;
+    height: 100vw;
+    transform: translate(calc((100vw - 100vh) / 2), calc((100vh - 100vw) / 2)) rotate(90deg);
+    transform-origin: center center;
   }
 
   .bar {
