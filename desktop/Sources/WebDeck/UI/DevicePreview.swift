@@ -3,12 +3,12 @@ import SwiftUI
 /// Mockup of the client device, used in the editor's canvas pane. Shows
 /// a page's buttons as they would appear on the real client, framed by
 /// a device chrome (status bar at the top, home indicator at the
-/// bottom). Supports iPhone and iPad in both orientations so the
+/// bottom). Supports Phone and Tablet in both orientations so the
 /// editor can preview how the layout will look on the user's device.
 struct DevicePreview: View {
     enum DeviceFamily: String, CaseIterable, Identifiable {
-        case phone = "iPhone"
-        case pad = "iPad"
+        case phone = "Phone"
+        case pad = "Tablet"
         var id: String { rawValue }
         var icon: String {
             switch self {
@@ -105,13 +105,19 @@ struct DevicePreview: View {
                     .padding(portrait ? 10 : 8)
             }
             .frame(width: size.width, height: size.height)
-            .frame(width: available.width, height: available.height)
         }
     }
 
     private func screen(size: CGSize) -> some View {
-        let screenWidth = size.width - (portrait ? 28 : 24)
-        let screenHeight = size.height - (portrait ? 28 : 24)
+        let screenWidth = size.width - (portrait ? 24 : 20)
+        let screenHeight = size.height - (portrait ? 24 : 20)
+        // Reserve space at the top (status bar + page chrome) and the
+        // bottom (page dots + home indicator) so the grid gets a known
+        // height to fit itself into.
+        let chromeTop: CGFloat = 36
+        let chromeBottom: CGFloat = 28
+        let gridArea = max(0, screenHeight - chromeTop - chromeBottom)
+
         return VStack(spacing: 0) {
             // Fake status bar
             HStack {
@@ -127,8 +133,8 @@ struct DevicePreview: View {
                 .foregroundStyle(Color.white.opacity(0.85))
             }
             .padding(.horizontal, max(8, screenWidth * 0.04))
-            .padding(.top, max(4, screenHeight * 0.012))
-            .padding(.bottom, max(2, screenHeight * 0.006))
+            .padding(.top, max(2, screenHeight * 0.008))
+            .frame(height: 14)
 
             // Page chrome
             HStack {
@@ -142,51 +148,55 @@ struct DevicePreview: View {
                     .foregroundStyle(Color.white.opacity(0.5))
             }
             .padding(.horizontal, max(8, screenWidth * 0.04))
-            .padding(.top, max(4, screenHeight * 0.012))
+            .frame(height: 22)
 
-            // The actual grid
-            grid(of: screenWidth, height: screenHeight)
+            // The actual grid — sized to the remaining height so its rows
+            // fit the available area without overflowing the device.
+            grid(of: screenWidth, height: gridArea)
                 .padding(.horizontal, max(6, screenWidth * 0.025))
-                .padding(.top, max(6, screenHeight * 0.02))
+                .padding(.top, max(4, screenHeight * 0.012))
+                .frame(height: gridArea, alignment: .top)
 
             Spacer(minLength: 0)
 
             // Page dots
             HStack(spacing: 4) {
-                ForEach(0..<max(1, page.buttons.isEmpty ? 1 : 1), id: \.self) { _ in
+                ForEach(0..<max(1, 1), id: \.self) { _ in
                     Circle()
                         .fill(Color.white.opacity(0.85))
                         .frame(width: 4, height: 4)
                 }
             }
-            .padding(.bottom, max(6, screenHeight * 0.02))
+            .frame(height: 8)
 
             // Home indicator
             Capsule()
                 .fill(Color.white.opacity(0.6))
                 .frame(width: max(40, screenWidth * 0.3), height: 4)
-                .padding(.bottom, max(4, screenHeight * 0.012))
+                .padding(.bottom, max(2, screenHeight * 0.008))
         }
         .frame(width: screenWidth, height: screenHeight)
-        .clipped()
     }
 
     @ViewBuilder
     private func grid(of screenWidth: CGFloat, height screenHeight: CGFloat) -> some View {
         let cols = max(1, page.columns)
-        let gap: CGFloat = max(4, screenWidth * 0.012)
+        let rows = max(1, Int(ceil(Double(page.buttons.count) / Double(cols))))
+        let gap: CGFloat = max(4, screenWidth * 0.014)
         let availableWidth = screenWidth * 0.95
         let cellWidth = (availableWidth - CGFloat(cols - 1) * gap) / CGFloat(cols)
-        // Each row sits at the top, doesn't fill the screen height (it's
-        // just the grid; the rest is "below the fold").
+        // Each cell is square; cap it so all rows fit in the available
+        // area. The label below the icon takes ~12% of the cell side.
+        let cellFromWidth = cellWidth
+        let cellFromHeight = (screenHeight - CGFloat(rows - 1) * gap) / CGFloat(rows) * 0.88
+        let cellSide = min(cellFromWidth, cellFromHeight)
+
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellWidth), spacing: gap), count: cols),
                   spacing: gap) {
             ForEach(page.buttons) { button in
-                previewCell(for: button, side: cellWidth)
+                previewCell(for: button, side: cellSide)
             }
         }
-        .frame(width: screenWidth, alignment: .top)
-        .clipped()
     }
 
     private func previewCell(for button: DeckButton, side: CGFloat) -> some View {
