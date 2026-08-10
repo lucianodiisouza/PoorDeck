@@ -29,17 +29,27 @@ struct DevicePreview: View {
     let page: Page
     @Binding var device: DeviceFamily
     @Binding var portrait: Bool
+    /// When true, the preview mirrors the orientation the most recent
+    /// client reported, instead of the local `portrait` toggle. This
+    /// is what the user wants when they're actively testing on a
+    /// real phone: rotate the phone, the preview rotates to match.
+    @Binding var followDevice: Bool
+    /// Last orientation reported by any client. Read only when
+    /// `followDevice` is true.
+    let serverDeviceOrientationIsPortrait: Bool
     let selectedButtonId: String?
     let onSelect: (String) -> Void
 
     /// Effective orientation the preview should render, taking the
-    /// page's `orientationLock` into account. When the lock is set,
-    /// it overrides the user's toggle so the preview always shows
-    /// what the user will see on a device that's actually held the
-    /// locked way.
+    /// page's `orientationLock` and (when active) the device's
+    /// reported orientation into account. When the lock is set,
+    /// it overrides both the toggle and the device.
     private var effectivePortrait: Bool {
         if let lock = page.orientationLock {
             return lock == .portrait
+        }
+        if followDevice {
+            return serverDeviceOrientationIsPortrait
         }
         return portrait
     }
@@ -87,8 +97,20 @@ struct DevicePreview: View {
                         .font(.system(size: 16, weight: .medium))
                 }
                 .buttonStyle(.borderless)
-                .help(portrait ? "Switch to landscape" : "Switch to portrait")
+                .disabled(followDevice)
+                .help(followDevice
+                      ? "Follow device is on — turn it off to use the manual toggle"
+                      : (portrait ? "Switch to landscape" : "Switch to portrait"))
             }
+
+            Toggle(isOn: $followDevice) {
+                Label("Follow", systemImage: followDevice
+                      ? "iphone.radiowaves.left.and.right"
+                      : "iphone")
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help("Mirror the orientation of the most recently connected device")
 
             Spacer()
         }
@@ -125,41 +147,26 @@ struct DevicePreview: View {
 
                 // Screen content — clipped to the device body so the grid
                 // can't escape the bezel.
-                screen(size: size)
+                screen(size: size, device: device)
                     .padding(isPortrait ? 10 : 8)
             }
             .frame(width: size.width, height: size.height)
         }
     }
 
-    private func screen(size: CGSize) -> some View {
+    private func screen(size: CGSize, device: DeviceFamily) -> some View {
         let isPortrait = effectivePortrait
         let screenWidth = size.width - (isPortrait ? 24 : 20)
         let screenHeight = size.height - (isPortrait ? 24 : 20)
         // Reserve space at the top (status bar + page chrome) and the
         // bottom (page dots + home indicator) so the grid gets a known
         // height to fit itself into.
-        let chromeTop: CGFloat = 36
+        let chromeTop: CGFloat = device == .phone && isPortrait ? 54 : 36
         let chromeBottom: CGFloat = 28
         let gridArea = max(0, screenHeight - chromeTop - chromeBottom)
 
         return VStack(spacing: 0) {
-            // Fake status bar
-            HStack {
-                Text("9:41")
-                    .font(.system(size: max(8, screenWidth * 0.025), weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                Spacer()
-                HStack(spacing: 4) {
-                    Image(systemName: "wifi")
-                    Image(systemName: "battery.100")
-                }
-                .font(.system(size: max(8, screenWidth * 0.025)))
-                .foregroundStyle(Color.white.opacity(0.85))
-            }
-            .padding(.horizontal, max(8, screenWidth * 0.04))
-            .padding(.top, max(2, screenHeight * 0.008))
-            .frame(height: 14)
+            statusBar(screenWidth: screenWidth, screenHeight: screenHeight)
 
             // Page chrome
             HStack {
@@ -194,14 +201,72 @@ struct DevicePreview: View {
             }
             .frame(height: 8)
 
-            // Home indicator
-            Capsule()
-                .fill(Color.white.opacity(0.6))
-                .frame(width: max(40, screenWidth * 0.3), height: 4)
-                .padding(.bottom, max(2, screenHeight * 0.008))
+            // Home indicator (iPhone only — iPads have a real home
+            // button visually, not a gesture pill).
+            if device == .phone {
+                Capsule()
+                    .fill(Color.white.opacity(0.6))
+                    .frame(width: max(40, screenWidth * 0.3), height: 4)
+                    .padding(.bottom, max(2, screenHeight * 0.008))
+            }
         }
         .frame(width: screenWidth, height: screenHeight)
         .clipped()
+    }
+
+    /// iOS-style status bar. Phones get a Dynamic Island (pill) that
+    /// shifts left in landscape; iPads get a small camera dot at the
+    /// top center. Time on the left, signal/wifi/battery on the
+    /// right — same arrangement Safari/Finder use in the iPad
+    /// status bar screenshots.
+    @ViewBuilder
+    private func statusBar(screenWidth: CGFloat, screenHeight: CGFloat) -> some View {
+        let isPortrait = effectivePortrait
+        let phonePortrait = device == .phone && isPortrait
+        let statusHeight: CGFloat = phonePortrait ? 54 : 28
+        let fontSize: CGFloat = max(8, screenWidth * 0.022)
+
+        ZStack(alignment: .top) {
+            // Time on the leading side, status icons on the trailing
+            // side — the same left/right arrangement as the real
+            // iOS status bar. The Dynamic Island / camera sits on
+            // top in the ZStack so the time and icons can flow
+            // around it.
+            HStack(alignment: .firstTextBaseline) {
+                Text("9:41")
+                    .font(.system(size: fontSize, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "wifi")
+                    Image(systemName: "battery.100")
+                }
+                .font(.system(size: fontSize))
+                .foregroundStyle(Color.white)
+            }
+            .padding(.horizontal, max(20, screenWidth * 0.06))
+            .frame(maxHeight: .infinity, alignment: phonePortrait ? .center : .center)
+            .padding(.top, phonePortrait ? 16 : 8)
+
+            // Camera / notch on the centered top edge. iPhone
+            // portrait = Dynamic Island pill in the middle; iPhone
+            // landscape = pill on the left; iPad = small camera dot.
+            if device == .phone {
+                Capsule()
+                    .fill(Color.black)
+                    .frame(
+                        width: phonePortrait ? screenWidth * 0.32 : screenWidth * 0.18,
+                        height: phonePortrait ? 28 : 8
+                    )
+                    .padding(.top, phonePortrait ? 8 : 4)
+            } else {
+                Circle()
+                    .fill(Color.black)
+                    .frame(width: 6, height: 6)
+                    .padding(.top, 4)
+            }
+        }
+        .frame(height: statusHeight)
     }
 
     @ViewBuilder
