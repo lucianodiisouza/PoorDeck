@@ -1,12 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { connect, deck, press } from "./lib/deck.svelte";
+  import { connect, deck, press, setVolume, toggleMuteSystem } from "./lib/deck.svelte";
   import { formatShortcut } from "./lib/shortcut";
+  import VolumeSlider from "./lib/VolumeSlider.svelte";
 
   let pageIndex = $state(0);
   const pages = $derived(deck.layout?.pages ?? []);
   const theme = $derived(deck.layout?.theme ?? null);
   const currentPage = $derived(pages[pageIndex] ?? null);
+  const isVolumePage = $derived(
+    currentPage?.buttons.some((b) => b.action.kind === "volume") ?? false,
+  );
 
   // Keep the theme reflected onto CSS variables.
   $effect(() => {
@@ -26,7 +30,15 @@
 
   onMount(connect);
 
-  function tap(id: string) {
+  function tap(id: string, button: import("./lib/types").Button) {
+    // Volume "buttons" fire-and-forget on the client side: we don't need the
+    // server to round-trip the press for an action that's already a slider
+    // control. Mute is the one we want to keep on tap.
+    if (button.action.kind === "volume" && button.id === "vol-mute") {
+      toggleMuteSystem();
+      if (navigator.vibrate) navigator.vibrate(8);
+      return;
+    }
     press(id);
     if (navigator.vibrate) navigator.vibrate(8);
   }
@@ -65,23 +77,32 @@
   {#if currentPage}
     <section
       class="grid"
+      class:volume={isVolumePage}
       style="grid-template-columns: repeat({currentPage.columns}, 1fr);"
     >
       {#each currentPage.buttons as button (button.id)}
-        <button
-          class="key"
-          class:acked={deck.lastAck?.buttonId === button.id && deck.lastAck?.ok}
-          onclick={() => tap(button.id)}
-        >
-          {#if button.icon}
-            <img class="icon" src={button.icon} alt={button.label} draggable="false" />
-          {:else if button.action.kind === "keyShortcut" && button.action.shortcut}
-            <span class="combo">{formatShortcut(button.action.shortcut)}</span>
-          {:else}
-            <span class="glyph">{button.label.slice(0, 1)}</span>
-          {/if}
-          <span class="label">{button.label}</span>
-        </button>
+        {#if button.action.kind === "volume" && button.id === "vol-master" && button.action.target}
+          <VolumeSlider
+            target={button.action.target}
+            label={button.label}
+            symbol={button.symbol ?? "speaker.wave.2.fill"}
+          />
+        {:else}
+          <button
+            class="key"
+            class:acked={deck.lastAck?.buttonId === button.id && deck.lastAck?.ok}
+            onclick={() => tap(button.id, button)}
+          >
+            {#if button.icon}
+              <img class="icon" src={button.icon} alt={button.label} draggable="false" />
+            {:else if button.action.kind === "keyShortcut" && button.action.shortcut}
+              <span class="combo">{formatShortcut(button.action.shortcut)}</span>
+            {:else}
+              <span class="glyph">{button.label.slice(0, 1)}</span>
+            {/if}
+            <span class="label">{button.label}</span>
+          </button>
+        {/if}
       {/each}
     </section>
 
@@ -138,6 +159,11 @@
     display: grid;
     gap: 12px;
     align-content: start;
+  }
+  .grid.volume {
+    /* The volume page has one tall slider and one square mute button; let
+       the row stretch to fill the available space. */
+    align-content: stretch;
   }
 
   .key {
