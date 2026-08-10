@@ -42,7 +42,14 @@ final class DeckStore {
     private static func seed() -> Layout {
         func btn(_ label: String, _ bundleId: String, _ symbol: String) -> DeckButton {
             DeckButton(id: bundleId, label: label, icon: nil, symbol: symbol,
-                       action: Action(kind: .openApp, bundleId: bundleId))
+                       action: Action(kind: .openApp, bundleId: bundleId, shortcut: nil))
+        }
+
+        func key(_ id: String, _ label: String, _ keyName: String,
+                 _ modifiers: [Shortcut.Modifier], app: String? = nil) -> DeckButton {
+            DeckButton(id: id, label: label, icon: nil, symbol: "keyboard",
+                       action: Action(kind: .keyShortcut, bundleId: app,
+                                      shortcut: Shortcut(key: keyName, modifiers: modifiers)))
         }
 
         let page1 = Page(id: "p1", name: "Apps", columns: 3, buttons: [
@@ -60,6 +67,16 @@ final class DeckStore {
             btn("Messages", "com.apple.MobileSMS", "message"),
         ])
 
-        return Layout(pages: [page1, page2], theme: .dark)
+        let page3 = Page(id: "p3", name: "Keys", columns: 3, buttons: [
+            key("copy", "Copy", "c", [.command]),
+            key("paste", "Paste", "v", [.command]),
+            key("new-tab", "New Tab", "t", [.command], app: "com.apple.Safari"),
+            // Claude's "accept" shortcut — brings Claude to the front, then ⌘↵.
+            key("claude-accept", "Claude ⌘↵", "return", [.command], app: "com.anthropic.claudefordesktop"),
+            key("screenshot", "Screenshot", "4", [.command, .shift]),
+            key("spotlight", "Spotlight", "space", [.command]),
+        ])
+
+        return Layout(pages: [page1, page2, page3], theme: .dark)
     }
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { connect, deck, press } from "./lib/deck.svelte";
+  import { formatShortcut } from "./lib/shortcut";
 
   let pageIndex = $state(0);
   const pages = $derived(deck.layout?.pages ?? []);
@@ -74,6 +75,8 @@
         >
           {#if button.icon}
             <img class="icon" src={button.icon} alt={button.label} draggable="false" />
+          {:else if button.action.kind === "keyShortcut" && button.action.shortcut}
+            <span class="combo">{formatShortcut(button.action.shortcut)}</span>
           {:else}
             <span class="glyph">{button.label.slice(0, 1)}</span>
           {/if}
@@ -176,6 +179,17 @@
     border-radius: 12px;
     background: var(--wd-accent);
     color: #fff;
+  }
+  .combo {
+    display: grid;
+    place-items: center;
+    min-width: 46%;
+    padding: 8px 12px;
+    font-size: 22px;
+    font-weight: 600;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--wd-text) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--wd-text) 18%, transparent);
   }
   .label {
     font-size: 12px;

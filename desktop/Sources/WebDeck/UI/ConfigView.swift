@@ -5,6 +5,7 @@ import SwiftUI
 /// editors land here next.
 struct ConfigView: View {
     @EnvironmentObject private var server: Server
+    @EnvironmentObject private var permissions: Permissions
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -13,6 +14,12 @@ struct ConfigView: View {
             pairingPanel
         }
         .frame(width: 720, height: 460)
+        // Re-check the Accessibility grant whenever the window regains focus,
+        // so granting it in System Settings reflects here without a relaunch.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+            permissions.refresh()
+        }
     }
 
     private var sidebar: some View {
@@ -33,6 +40,8 @@ struct ConfigView: View {
 
             Spacer()
 
+            accessibilityStatus
+
             HStack(spacing: 6) {
                 Circle()
                     .fill(server.isRunning ? .green : .orange)
@@ -44,6 +53,34 @@ struct ConfigView: View {
         }
         .padding(20)
         .frame(width: 200, alignment: .leading)
+    }
+
+    private var accessibilityStatus: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: permissions.accessibilityGranted
+                      ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(permissions.accessibilityGranted ? .green : .orange)
+                Text("Accessibility")
+                    .font(.caption.bold())
+            }
+            if permissions.accessibilityGranted {
+                Text("Keyboard shortcuts enabled")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Needed for keyboard-shortcut buttons")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button("Grant…") { permissions.requestAccessibility() }
+                        .controlSize(.small)
+                    Button("Settings") { permissions.openAccessibilitySettings() }
+                        .controlSize(.small)
+                }
+            }
+        }
+        .padding(.bottom, 8)
     }
 
     private var pairingPanel: some View {
