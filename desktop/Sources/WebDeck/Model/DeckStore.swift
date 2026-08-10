@@ -42,14 +42,24 @@ final class DeckStore {
     private static func seed() -> Layout {
         func btn(_ label: String, _ bundleId: String, _ symbol: String) -> DeckButton {
             DeckButton(id: bundleId, label: label, icon: nil, symbol: symbol,
-                       action: Action(kind: .openApp, bundleId: bundleId, shortcut: nil))
+                       action: Action(kind: .openApp, bundleId: bundleId, shortcut: nil,
+                                      target: nil))
         }
 
         func key(_ id: String, _ label: String, _ keyName: String,
                  _ modifiers: [Shortcut.Modifier], app: String? = nil) -> DeckButton {
             DeckButton(id: id, label: label, icon: nil, symbol: "keyboard",
                        action: Action(kind: .keyShortcut, bundleId: app,
-                                      shortcut: Shortcut(key: keyName, modifiers: modifiers)))
+                                      shortcut: Shortcut(key: keyName, modifiers: modifiers),
+                                      target: nil))
+        }
+
+        /// A "control" button. The id is the button id, not a bundle id.
+        /// `label` shows under the control, `symbol` is the SF-style glyph.
+        func volume(_ id: String, _ label: String, _ symbol: String) -> DeckButton {
+            DeckButton(id: id, label: label, icon: nil, symbol: symbol,
+                       action: Action(kind: .volume, bundleId: nil,
+                                      shortcut: nil, target: .system))
         }
 
         let page1 = Page(id: "p1", name: "Apps", columns: 3, buttons: [
@@ -77,6 +87,11 @@ final class DeckStore {
             key("spotlight", "Spotlight", "space", [.command]),
         ])
 
-        return Layout(pages: [page1, page2, page3], theme: .dark)
+        let page4 = Page(id: "p4", name: "Volume", columns: 2, buttons: [
+            volume("vol-master", "System", "speaker.wave.2.fill"),
+            volume("vol-mute", "Mute", "speaker.slash.fill"),
+        ])
+
+        return Layout(pages: [page1, page2, page3, page4], theme: .dark)
     }
 }
