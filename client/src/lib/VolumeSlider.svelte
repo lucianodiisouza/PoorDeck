@@ -144,8 +144,10 @@
   }
   .vol.horizontal {
     flex-direction: row;
+    align-items: center;
     padding: 10px 12px;
     gap: 12px;
+    width: 100%;
   }
 
   .header {
@@ -154,6 +156,7 @@
     gap: 6px;
     font-size: 13px;
     color: color-mix(in srgb, var(--wd-text) 80%, transparent);
+    flex-shrink: 0;
   }
   .symbol {
     font-size: 18px;
@@ -175,9 +178,10 @@
   }
   .vol.horizontal .track {
     width: auto;
+    min-width: 0;
     height: 22px;
     min-height: 0;
-    flex: 1;
+    flex: 1 1 0;
   }
   .track:focus-visible {
     box-shadow: 0 0 0 2px var(--wd-accent);
