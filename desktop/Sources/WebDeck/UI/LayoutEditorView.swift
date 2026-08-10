@@ -286,27 +286,51 @@ struct LayoutEditorView: View {
         }
     }
 
-    /// A small label + stepper pair used for the default columns.
+    /// Compact "− N +" counter. Used for the default columns and the
+    /// per-orientation overrides; a stepper's native chevrons are
+    /// too tall for an inline toolbar, and they don't line up
+    /// across rows the way a hand-rolled counter does.
+    @ViewBuilder
+    private func counter(value: Int, onChange: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 0) {
+            Button { onChange(max(1, value - 1)) } label: {
+                Image(systemName: "minus")
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.borderless)
+            .disabled(value <= 1)
+            Text("\(value)")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .frame(minWidth: 22, alignment: .center)
+            Button { onChange(min(8, value + 1)) } label: {
+                Image(systemName: "plus")
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.borderless)
+            .disabled(value >= 8)
+        }
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.gray.opacity(0.15))
+        )
+    }
+
+    /// Caption + counter row, used for the default columns.
     @ViewBuilder
     private func colsField(label: String, value: Int, onChange: @escaping (Int) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
-            Stepper(value: Binding(get: { value }, set: onChange), in: 1...8) {
-                Text("\(value)")
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .frame(minWidth: 18, alignment: .leading)
-            }
-            .labelsHidden()
+            counter(value: value, onChange: onChange)
         }
     }
 
-    /// A label + stepper pair for an orientation column override. The
-    /// stepper is grayed out until the override is "set"; clicking
-    /// the (—) glyph enables the override and seeds it with the
-    /// current default; clicking the value disables it.
+    /// Caption + "— (default N)" placeholder or "− N + X" control
+    /// when the override is set. Click the placeholder to enable,
+    /// click X to clear.
     @ViewBuilder
     private func orientationField(
         label: String,
@@ -316,67 +340,101 @@ struct LayoutEditorView: View {
         onChange: @escaping (Int) -> Void,
         onDisable: @escaping () -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
-            HStack(spacing: 4) {
-                if let v = value {
-                    Stepper(value: Binding(get: { v }, set: onChange), in: 1...8) {
-                        Text("\(v)")
-                            .font(.system(size: 13, weight: .medium, design: .monospaced))
-                            .frame(minWidth: 18, alignment: .leading)
-                    }
-                    .labelsHidden()
-                    Button {
-                        onDisable()
-                    } label: {
+            if let v = value {
+                HStack(spacing: 4) {
+                    counter(value: v, onChange: onChange)
+                    Button(action: onDisable) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.borderless)
                     .help("Clear the \(label.lowercased()) override and use the default (\(fallback))")
-                } else {
-                    Button(action: onEnable) {
-                        HStack(spacing: 4) {
-                            Text("—")
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                            Text("(default \(fallback))")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Set a separate \(label.lowercased()) column count")
                 }
+            } else {
+                Button(action: onEnable) {
+                    Text("— (default \(fallback))")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .frame(height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.gray.opacity(0.10))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Color.gray.opacity(0.20), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Set a separate \(label.lowercased()) column count")
             }
         }
     }
 
-    /// Segmented picker for the orientation lock. Three states: free
-    /// (follow device), portrait, landscape.
+    /// Caption + a compact dropdown picker. The segmented Free /
+    /// Portrait / Landscape picker took more horizontal room than
+    /// the rest of the toolbar; a menu button is visually quieter
+    /// and shows the current value on its label.
     @ViewBuilder
     private func lockField(for page: Page) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("Lock")
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
-            Picker("", selection: Binding<OrientationLock?>(
-                get: { page.orientationLock },
-                set: { newValue in
-                    store.updatePage(id: page.id, orientationLock: .some(newValue))
+            Menu {
+                Button("Free (follow device)") {
+                    store.updatePage(id: page.id, orientationLock: .some(nil))
                 }
-            )) {
-                Text("Free").tag(OrientationLock?.none)
-                Text("Portrait").tag(OrientationLock?.some(.portrait))
-                Text("Landscape").tag(OrientationLock?.some(.landscape))
+                Button("Portrait") {
+                    store.updatePage(id: page.id, orientationLock: .some(.portrait))
+                }
+                Button("Landscape") {
+                    store.updatePage(id: page.id, orientationLock: .some(.landscape))
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: page.orientationLock == nil
+                          ? "iphone"
+                          : "lock")
+                        .font(.system(size: 11))
+                    Text(lockLabel(for: page))
+                        .font(.system(size: 12, weight: .medium))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(page.orientationLock == nil
+                              ? Color.gray.opacity(0.10)
+                              : Color.accentColor.opacity(0.22))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(page.orientationLock == nil
+                                      ? Color.gray.opacity(0.20)
+                                      : Color.accentColor.opacity(0.4),
+                                      lineWidth: 1)
+                )
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 200)
+            .menuStyle(.borderlessButton)
+        }
+    }
+
+    private func lockLabel(for page: Page) -> String {
+        switch page.orientationLock {
+        case .portrait: return "Portrait"
+        case .landscape: return "Landscape"
+        case nil: return "Free"
         }
     }
 
