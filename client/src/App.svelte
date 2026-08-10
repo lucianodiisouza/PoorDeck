@@ -6,10 +6,56 @@
   import AppVolumeSlider from "./lib/AppVolumeSlider.svelte";
 
   let pageIndex = $state(0);
+  let viewportW = $state(390);
+  let viewportH = $state(700);
   const pages = $derived(deck.layout?.pages ?? []);
   const theme = $derived(deck.layout?.theme ?? null);
   const currentPage = $derived(pages[pageIndex] ?? null);
   const isVolumePage = $derived(currentPage?.id === "p4" ?? false);
+
+  // Pick a column count that fits the viewport. Portrait phones keep the
+  // editor's column count; landscape phones get more columns so all rows
+  // fit on screen (no scrolling, matching a real Stream Deck). Tablets
+  // get the editor's count regardless of orientation.
+  const effectiveColumns = $derived.by(() => {
+    if (!currentPage) return 3;
+    const isLandscape = viewportW > viewportH;
+    const isPhoneSize = Math.max(viewportW, viewportH) < 900;
+    if (isLandscape && isPhoneSize) {
+      // Double columns so the page is one or two rows wide in landscape.
+      return Math.max(currentPage.columns, currentPage.columns * 2);
+    }
+    return currentPage.columns;
+  });
+
+  // Per-cell size cap, in CSS pixels: the smaller of (column width,
+  // available height / row count). Lets a 3-col 6-button page render
+  // as 3x2 on any phone, regardless of orientation, without scrolling.
+  const cellMaxPx = $derived.by(() => {
+    const cols = effectiveColumns;
+    const rows = Math.max(1, Math.ceil(currentPage?.buttons.length ?? 0 / cols));
+    // Account for gaps (12px) and padding around the grid (14*2=28).
+    const widthFit = (viewportW - 28 - (cols - 1) * 12) / cols;
+    // Header (~40) + dots (~16) + home indicator (~30) + safe area.
+    const heightAvailable = viewportH - 40 - 16 - 30 - 40;
+    const heightFit = heightAvailable / rows;
+    return Math.max(40, Math.min(widthFit, heightFit));
+  });
+
+  function onResize() {
+    viewportW = window.innerWidth;
+    viewportH = window.innerHeight;
+  }
+
+  onMount(() => {
+    onResize();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  });
 
   // Keep the theme reflected onto CSS variables.
   $effect(() => {
@@ -110,7 +156,7 @@
     {:else}
       <section
         class="grid"
-        style="grid-template-columns: repeat({currentPage.columns}, 1fr);"
+        style="grid-template-columns: repeat({effectiveColumns}, 1fr); --wd-cell-max: {cellMaxPx}px;"
       >
         {#each currentPage.buttons as button (button.id)}
           <button
@@ -187,7 +233,6 @@
   }
 
   .key {
-    aspect-ratio: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -195,6 +240,13 @@
     gap: 8px;
     border: none;
     border-radius: var(--wd-radius);
+    width: 100%;
+    aspect-ratio: 1;
+    /* The grid's --wd-cell-max variable is set inline by App.svelte
+       to min(viewportWidth/cols, viewportHeight/rows) so the cell
+       can never grow large enough to push the row off-screen. */
+    max-width: var(--wd-cell-max, 200px);
+    max-height: var(--wd-cell-max, 200px);
     background: var(--wd-surface);
     color: var(--wd-text);
     cursor: pointer;
