@@ -39,7 +39,7 @@ This first cut proves the risky end-to-end path:
 - [x] WebSocket protocol, full-layout push on connect
 - [x] Tap a button → open / switch the target Mac app (with its real icon)
 - [x] Swipe between pages
-- [ ] Keyboard-shortcut actions (CGEvent + Accessibility) — next
+- [x] Keyboard-shortcut actions (CGEvent + Accessibility)
 - [ ] Per-app volume sliders / knobs — reuse the `voulum` process-tap engine
 - [ ] Page / button / theme editors in the desktop config window
 - [ ] Persisted configuration
