@@ -9,12 +9,12 @@ import Foundation
 
 // MARK: Layout (server -> client)
 
-struct Layout: Codable {
+struct Layout: Codable, Equatable {
     var pages: [Page]
     var theme: Theme
 }
 
-struct Page: Codable {
+struct Page: Codable, Identifiable, Equatable {
     var id: String
     var name: String
     /// Column count the client uses to lay the grid out.
@@ -24,7 +24,7 @@ struct Page: Codable {
 
 /// Named `DeckButton` (not `Button`) to avoid colliding with SwiftUI.Button in
 /// the desktop UI. Serializes the same shape as the client's `Button` type.
-struct DeckButton: Codable {
+struct DeckButton: Codable, Identifiable, Equatable {
     var id: String
     var label: String
     /// PNG data URL (e.g. the app's own icon), when we have one.
@@ -34,7 +34,7 @@ struct DeckButton: Codable {
     var action: Action
 }
 
-struct Action: Codable {
+struct Action: Codable, Equatable {
     enum Kind: String, Codable {
         case openApp      // launch or bring an app to the front
         case keyShortcut  // post a keyboard shortcut (e.g. ⌘↵)
@@ -61,7 +61,7 @@ enum VolumeTarget: String, Codable {
 
 /// A keyboard shortcut, described by layout-independent key name + modifiers.
 /// e.g. ⌘↵ = Shortcut(key: "return", modifiers: [.command]).
-struct Shortcut: Codable {
+struct Shortcut: Codable, Equatable {
     enum Modifier: String, Codable {
         case command, shift, option, control
     }
@@ -71,7 +71,7 @@ struct Shortcut: Codable {
     var modifiers: [Modifier]
 }
 
-struct Theme: Codable {
+struct Theme: Codable, Equatable {
     var background: String
     var surface: String
     var text: String
