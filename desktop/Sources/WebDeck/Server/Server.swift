@@ -27,12 +27,25 @@ final class Server: ObservableObject, @unchecked Sendable {
 
     private let candidatePorts: [UInt16] = [8756, 8757, 8758, 8759, 8760]
 
+    /// System volume bridge — observes the master output device and broadcasts
+    /// changes to every connected client.
+    private let systemVolume = SystemVolume()
+
     // MARK: Lifecycle
 
     func start() {
         guard listener == nil else { return }
         host = NetworkInfo.primaryIPv4() ?? "localhost"
         tryListen(portIndex: 0)
+        startVolumeBridge()
+    }
+
+    private func startVolumeBridge() {
+        systemVolume.onChange = { [weak self] value in
+            guard let self, let value else { return }
+            self.broadcast(.volume(target: .system, value: value))
+        }
+        systemVolume.startListening()
     }
 
     private func tryListen(portIndex: Int) {
@@ -186,6 +199,11 @@ final class Server: ObservableObject, @unchecked Sendable {
         clients[ObjectIdentifier(conn)] = conn
         let count = clients.count
         Task { @MainActor in self.clientCount = count }
+        // Push the current system volume so the slider reflects reality on
+        // first paint instead of waiting for the next local change.
+        if let value = SystemVolume.get() {
+            sendServerMessage(.volume(target: .system, value: value), to: conn)
+        }
     }
 
     private func unregisterClient(_ conn: NWConnection) {
@@ -254,6 +272,16 @@ final class Server: ObservableObject, @unchecked Sendable {
                 }
                 self.sendServerMessage(.ack(buttonId: buttonId, ok: ok), to: conn)
             }
+        case .volume(let target, let value):
+            // Fire-and-forget: apply, then broadcast so every client (and
+            // this one too) converges to the new level. We don't echo back
+            // the same value we just wrote — CoreAudio's own listener will
+            // fire and the systemVolume bridge will fan it out, so a manual
+            // broadcast here would just be a duplicate.
+            switch target {
+            case .system:
+                _ = SystemVolume.set(value)
+            }
         }
     }
 
@@ -268,6 +296,22 @@ final class Server: ObservableObject, @unchecked Sendable {
         guard let data = try? JSONEncoder().encode(message),
               let text = String(data: data, encoding: .utf8) else { return }
         conn.send(content: WebSocket.encode(text: text), completion: .idempotent)
+    }
+
+    /// Send the same message to every connected client. Used for system
+    /// events (volume changes) that should reach all peers, not just the
+    /// socket that triggered them. Hopped onto the network queue because
+    /// `clients` is owned by that queue.
+    private func broadcast(_ message: ServerMessage) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard let data = try? JSONEncoder().encode(message),
+                  let text = String(data: data, encoding: .utf8) else { return }
+            let frame = WebSocket.encode(text: text)
+            for conn in self.clients.values {
+                conn.send(content: frame, completion: .idempotent)
+            }
+        }
     }
 
     // MARK: HTTP send helper
