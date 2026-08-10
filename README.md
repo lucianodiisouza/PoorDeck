@@ -1,11 +1,11 @@
-<h1 align="center">WebDeck</h1>
+<h1 align="center">PoorDeck</h1>
 
 <p align="center">
   <em>A Stream-Deck-style control surface for your Mac — driven from your phone,
   tablet, or any browser on the same Wi-Fi.</em>
 </p>
 
-WebDeck is two projects:
+PoorDeck is two projects:
 
 - **`desktop/`** — a macOS menu-bar app (SwiftUI) that *is* the server. It hosts
   the client, executes the actions, and holds the configuration.
@@ -19,9 +19,9 @@ code (or typing the URL). Same Wi-Fi is all it needs.
 
 ```
 ┌──────────────── Mac ────────────────┐        ┌──── phone / tablet / web ────┐
-│  WebDeck.app (menu bar + config)     │  http  │  Svelte client                │
+│  PoorDeck.app (menu bar + config)    │  http  │  Svelte client                │
 │  • HTTP + WebSocket server (native)  │◀──────▶│  • renders pages              │
-│  • Bonjour  _webdeck._tcp            │   ws   │  • swipe to switch page       │
+│  • Bonjour  _poordeck._tcp           │   ws   │  • swipe to switch page       │
 │  • executes: open/switch app …       │        │  • tap to fire an action      │
 └──────────────────────────────────────┘        └───────────────────────────────┘
 ```
