@@ -66,6 +66,9 @@ export function connect(): void {
   ws.onopen = () => {
     deck.status = "open";
     send({ type: "hello", name: navigator.userAgent });
+    // Report viewport orientation so the editor's "Follow device"
+    // preview can mirror it. Re-sent on every resize/orientationchange.
+    sendDeviceOrientation();
   };
 
   ws.onmessage = (event) => {
@@ -122,6 +125,12 @@ function send(message: ClientMessage): void {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
   }
+}
+
+function sendDeviceOrientation(): void {
+  if (typeof window === "undefined") return;
+  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  send({ type: "deviceOrientation", isPortrait });
 }
 
 export function press(buttonId: string): void {

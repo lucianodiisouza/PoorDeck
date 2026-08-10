@@ -17,6 +17,9 @@ final class Server: ObservableObject, @unchecked Sendable {
     @Published private(set) var port: UInt16 = 0
     @Published private(set) var host: String = "—"
     @Published private(set) var clientCount = 0
+    /// Last orientation the most recent client reported. Used by the
+    /// editor's "Follow device" preview mode. `true` = portrait.
+    @Published private(set) var lastDeviceOrientationIsPortrait = true
 
     /// Pairing URL shown in the UI and encoded into the QR code.
     var pairingURL: String { "http://\(host):\(port)" }
@@ -343,6 +346,11 @@ final class Server: ObservableObject, @unchecked Sendable {
                                            volume: self.audio.volume(for: process),
                                            muted: self.audio.isMuted(process)))
             }
+        case .deviceOrientation(let isPortrait):
+            // Update the server's last-known device orientation. The
+            // editor's "Follow device" canvas mode reads this to
+            // re-render the preview the same way the phone is held.
+            self.lastDeviceOrientationIsPortrait = isPortrait
         }
     }
 

@@ -212,8 +212,14 @@ enum ClientMessage: Decodable {
     /// independently of `value`; the server treats a 0 value as "muted via
     /// slider" but the two concepts are kept separate for cleaner state.
     case setAppVolume(id: String, value: Float, muted: Bool)
+    /// The client reports its current viewport orientation. Used by the
+    /// editor's "Follow device" preview toggle to render the device
+    /// the same way the user is actually holding it.
+    case deviceOrientation(isPortrait: Bool)
 
-    private enum CodingKeys: String, CodingKey { case type, name, buttonId, target, value, id, muted }
+    private enum CodingKeys: String, CodingKey {
+        case type, name, buttonId, target, value, id, muted, isPortrait
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -227,6 +233,10 @@ enum ClientMessage: Decodable {
             self = .setAppVolume(id: try c.decode(String.self, forKey: .id),
                                  value: try c.decode(Float.self, forKey: .value),
                                  muted: try c.decode(Bool.self, forKey: .muted))
+        case "deviceOrientation":
+            self = .deviceOrientation(
+                isPortrait: try c.decode(Bool.self, forKey: .isPortrait)
+            )
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown client message")
         }
