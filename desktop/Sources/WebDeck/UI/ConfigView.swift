@@ -25,10 +25,11 @@ struct ConfigView: View {
     @State private var section: Section = .pairing
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            sidebar
+        VStack(spacing: 0) {
+            topBar
             Divider()
             detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 880, minHeight: 540)
         .onReceive(NotificationCenter.default.publisher(
@@ -37,42 +38,15 @@ struct ConfigView: View {
         }
     }
 
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("WebDeck")
-                    .font(.title2.bold())
-                Text("Configuration")
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 20)
-
+    /// iPadOS-style top tab bar. Fills the full window width and uses a
+    /// glassy background to match the macOS 14+ segmented look. Each tab
+    /// is a single tap; the active one picks up the accent tint.
+    private var topBar: some View {
+        HStack(spacing: 4) {
             ForEach(Section.allCases) { s in
-                Button {
-                    section = s
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: s.icon)
-                            .frame(width: 18)
-                        Text(s.rawValue)
-                            .fontWeight(section == s ? .semibold : .regular)
-                        Spacer()
-                    }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(section == s
-                                  ? Color.accentColor.opacity(0.18)
-                                  : Color.clear)
-                    )
-                    .foregroundStyle(section == s ? Color.accentColor : Color.primary)
-                }
-                .buttonStyle(.plain)
+                tabButton(for: s)
             }
-
             Spacer()
-
             HStack(spacing: 6) {
                 Circle()
                     .fill(server.isRunning ? .green : .orange)
@@ -82,8 +56,40 @@ struct ConfigView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(20)
-        .frame(width: 200, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+
+    private func tabButton(for s: Section) -> some View {
+        let isActive = section == s
+        return Button {
+            section = s
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: s.icon)
+                Text(s.rawValue)
+                    .fontWeight(isActive ? .semibold : .regular)
+            }
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(isActive
+                          ? Color.accentColor.opacity(0.22)
+                          : Color.clear)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(
+                        isActive ? Color.accentColor.opacity(0.4) : Color.gray.opacity(0.18),
+                        lineWidth: 1
+                    )
+            )
+            .foregroundStyle(isActive ? Color.accentColor : Color.primary)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

@@ -13,12 +13,21 @@ struct LayoutEditorView: View {
 
     var body: some View {
         HSplitView {
-            pageList
-                .frame(minWidth: 180, idealWidth: 200, maxWidth: 240)
-            buttonGrid
-                .frame(minWidth: 360)
-            buttonForm
-                .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
+            HSplitView {
+                pageList
+                    .frame(minWidth: 160, idealWidth: 180, maxWidth: 220)
+                buttonGrid
+                    .frame(minWidth: 380)
+            }
+            .frame(maxWidth: .infinity)
+
+            if currentButton != nil, let pageId = currentPage?.id {
+                buttonForm
+                    .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
+            } else {
+                hintPane
+                    .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
+            }
         }
         .onAppear {
             if selectedPageId == nil {
@@ -39,6 +48,25 @@ struct LayoutEditorView: View {
                 selectedButtonId = nil
             }
         }
+    }
+
+    private var hintPane: some View {
+        VStack(spacing: 6) {
+            Spacer()
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 32))
+                .foregroundStyle(.tertiary)
+            Text("Select a button")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text("Click any button in the grid to edit it.")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 
     // MARK: Page list
