@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Xcode / xcodegen
+desktop/WebDeck.xcodeproj/
+desktop/build/
+*.xcuserstate
+DerivedData/
+
+# Node / Vite
+client/node_modules/
+client/dist/
