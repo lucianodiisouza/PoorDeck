@@ -18,12 +18,15 @@
     target: VolumeTarget;
     label: string;
     symbol: string;
+    /** Vertical (default) for the standalone master slider, horizontal when
+     *  used inline on the volume page beside the per-app list. */
+    orientation?: "vertical" | "horizontal";
   };
 
-  let { target, label, symbol }: Props = $props();
+  let { target, label, symbol, orientation = "vertical" }: Props = $props();
 
   // Local mirror of the system volume. We mirror so dragging feels instant;
-  // the server pushes back the same value (suppressed via `adjustingUntil`).
+  // the server pushes back the same value (suppressed via `isEcho`).
   let local = $state(0.6);
   let isDragging = $state(false);
   let trackEl: HTMLDivElement | null = $state(null);
@@ -36,11 +39,19 @@
     local = deck.systemVolume;
   });
 
-  function setFromClientY(clientY: number) {
+  const horizontal = $derived(orientation === "horizontal");
+
+  function setFromClient(clientXY: { x: number; y: number }) {
     if (!trackEl) return;
     const rect = trackEl.getBoundingClientRect();
-    // Top of track = 1.0, bottom = 0.0.
-    const ratio = 1 - (clientY - rect.top) / rect.height;
+    let ratio: number;
+    if (horizontal) {
+      // Left of track = 0, right = 1.
+      ratio = (clientXY.x - rect.left) / rect.width;
+    } else {
+      // Top of track = 1, bottom = 0.
+      ratio = 1 - (clientXY.y - rect.top) / rect.height;
+    }
     const clamped = Math.max(0, Math.min(1, ratio));
     local = clamped;
     setVolume(target, clamped);
@@ -49,11 +60,11 @@
   function onPointerDown(e: PointerEvent) {
     isDragging = true;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setFromClientY(e.clientY);
+    setFromClient({ x: e.clientX, y: e.clientY });
   }
   function onPointerMove(e: PointerEvent) {
     if (!isDragging) return;
-    setFromClientY(e.clientY);
+    setFromClient({ x: e.clientX, y: e.clientY });
   }
   function onPointerUp(e: PointerEvent) {
     isDragging = false;
@@ -61,7 +72,6 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    // Arrow up/right bumps up, down/left bumps down. Shift = 5%, page = 10%.
     const step = e.shiftKey ? 0.05 : 0.02;
     let next = local;
     if (e.key === "ArrowUp" || e.key === "ArrowRight") next = local + step;
@@ -81,7 +91,11 @@
   const muted = $derived(local < 0.005);
 </script>
 
-<div class="vol" class:dragging={isDragging}>
+<div
+  class="vol"
+  class:dragging={isDragging}
+  class:horizontal
+>
   <div class="header">
     <span class="symbol" aria-hidden="true">{symbolFor(symbol, muted)}</span>
     <span class="label">{label}</span>
@@ -102,8 +116,13 @@
     onpointercancel={onPointerUp}
     onkeydown={onKey}
   >
-    <div class="fill" style="height: {percent}%"></div>
-    <div class="thumb" style="bottom: calc({percent}% - 12px)"></div>
+    {#if horizontal}
+      <div class="fill-h" style="width: {percent}%"></div>
+      <div class="thumb-h" style="left: calc({percent}% - 9px)"></div>
+    {:else}
+      <div class="fill-v" style="height: {percent}%"></div>
+      <div class="thumb-v" style="bottom: calc({percent}% - 9px)"></div>
+    {/if}
   </div>
 
   <div class="readout">{percent}%</div>
@@ -122,6 +141,11 @@
     user-select: none;
     -webkit-user-select: none;
     touch-action: none;
+  }
+  .vol.horizontal {
+    flex-direction: row;
+    padding: 10px 12px;
+    gap: 12px;
   }
 
   .header {
@@ -149,11 +173,17 @@
     cursor: pointer;
     outline: none;
   }
+  .vol.horizontal .track {
+    width: auto;
+    height: 22px;
+    min-height: 0;
+    flex: 1;
+  }
   .track:focus-visible {
     box-shadow: 0 0 0 2px var(--wd-accent);
   }
 
-  .fill {
+  .fill-v {
     position: absolute;
     left: 0;
     right: 0;
@@ -166,8 +196,21 @@
     );
     transition: height 0.05s linear;
   }
+  .fill-h {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    border-radius: 999px;
+    background: linear-gradient(
+      to right,
+      var(--wd-accent),
+      color-mix(in srgb, var(--wd-accent) 70%, var(--wd-text))
+    );
+    transition: width 0.05s linear;
+  }
 
-  .thumb {
+  .thumb-v {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
@@ -180,8 +223,19 @@
       0 0 0 2px color-mix(in srgb, var(--wd-accent) 40%, transparent);
     transition: bottom 0.05s linear;
   }
+  .thumb-h {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--wd-text);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    transition: left 0.05s linear;
+  }
 
-  .dragging .thumb {
+  .dragging .thumb-v {
     transform: translateX(-50%) scale(1.1);
   }
 
@@ -189,5 +243,9 @@
     font-size: 12px;
     color: color-mix(in srgb, var(--wd-text) 55%, transparent);
     font-variant-numeric: tabular-nums;
+  }
+  .vol.horizontal .readout {
+    min-width: 36px;
+    text-align: right;
   }
 </style>
