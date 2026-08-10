@@ -182,15 +182,19 @@ struct DevicePreview: View {
 
     @ViewBuilder
     private func grid(of screenWidth: CGFloat, height screenHeight: CGFloat) -> some View {
+        // Mirrors the client's CSS: padding 14 around the grid, 12px
+        // gap between cells, square cells capped to fit the rows in
+        // the available height (with a label at the bottom).
         let cols = max(1, page.columns)
         let rows = max(1, Int(ceil(Double(page.buttons.count) / Double(cols))))
-        let gap: CGFloat = max(4, screenWidth * 0.014)
-        let availableWidth = screenWidth * 0.95
+        let gap: CGFloat = 12
+        let availableWidth = screenWidth - 28
         let cellWidth = (availableWidth - CGFloat(cols - 1) * gap) / CGFloat(cols)
-        // Each cell is square; cap it so all rows fit in the available
-        // area. The label below the icon takes ~12% of the cell side.
+        // Height budget = screen height - status bar (24) - chrome
+        // header (40) - dots (16) - home indicator (30) - padding (12).
+        let heightBudget = max(40, screenHeight - 24 - 40 - 16 - 30 - 12)
         let cellFromWidth = cellWidth
-        let cellFromHeight = (screenHeight - CGFloat(rows - 1) * gap) / CGFloat(rows) * 0.88
+        let cellFromHeight = (heightBudget - CGFloat(rows - 1) * gap) / CGFloat(rows)
         let cellSide = min(cellFromWidth, cellFromHeight)
 
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellWidth), spacing: gap), count: cols),
@@ -206,29 +210,32 @@ struct DevicePreview: View {
         return Button {
             onSelect(button.id)
         } label: {
-            VStack(spacing: 4) {
+            // Same proportions the client uses: 46% icon, 12px label,
+            // radius from the theme. The .icon fits inside an inner
+            // padding so the cell reads like the real one on the phone.
+            VStack(spacing: 6) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: side * 0.18)
+                    RoundedRectangle(cornerRadius: side * 0.15)
                         .fill(Color(red: 0.11, green: 0.12, blue: 0.15))
                     if let icon = button.icon, let nsImage = Self.imageFromDataURL(icon) {
                         Image(nsImage: nsImage)
                             .resizable()
                             .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
-                            .padding(side * 0.18)
+                            .padding(side * 0.27)
                     } else {
                         Image(systemName: button.symbol ?? "questionmark.square")
-                            .font(.system(size: side * 0.35))
+                            .font(.system(size: side * 0.46))
                             .foregroundStyle(Color.white)
                     }
                 }
-                .aspectRatio(1, contentMode: .fit)
+                .frame(width: side, height: side)
                 .overlay(
-                    RoundedRectangle(cornerRadius: side * 0.18)
+                    RoundedRectangle(cornerRadius: side * 0.15)
                         .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
                 )
                 Text(button.label)
-                    .font(.system(size: max(8, side * 0.10)))
+                    .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
                     .truncationMode(.tail)
