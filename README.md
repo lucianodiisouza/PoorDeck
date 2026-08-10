@@ -41,7 +41,10 @@ This first cut proves the risky end-to-end path:
 - [x] Swipe between pages
 - [x] Keyboard-shortcut actions (CGEvent + Accessibility)
 - [x] System volume slider + mute (master output, live updates both ways)
-- [ ] Per-app volume sliders / knobs — reuse the [Voulum](https://github.com/lucianodiisouza/voulum) process-tap engine
+- [x] Per-app volume — Core Audio process taps drive a live list of apps
+      playing audio on the Volume page (icons + horizontal sliders + mute).
+      Boost up to 2× and per-app mute. Built on the same process-tap
+      pipeline that powers [Voulum](https://github.com/lucianodiisouza/voulum).
 - [ ] Page / button / theme editors in the desktop config window
 - [ ] Persisted configuration
 
