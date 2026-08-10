@@ -1,16 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { connect, deck, press, setVolume, toggleMuteSystem } from "./lib/deck.svelte";
+  import { connect, deck, press, toggleMuteSystem } from "./lib/deck.svelte";
   import { formatShortcut } from "./lib/shortcut";
   import VolumeSlider from "./lib/VolumeSlider.svelte";
+  import AppVolumeSlider from "./lib/AppVolumeSlider.svelte";
 
   let pageIndex = $state(0);
   const pages = $derived(deck.layout?.pages ?? []);
   const theme = $derived(deck.layout?.theme ?? null);
   const currentPage = $derived(pages[pageIndex] ?? null);
-  const isVolumePage = $derived(
-    currentPage?.buttons.some((b) => b.action.kind === "volume") ?? false,
-  );
+  const isVolumePage = $derived(currentPage?.id === "p4" ?? false);
 
   // Keep the theme reflected onto CSS variables.
   $effect(() => {
@@ -31,9 +30,6 @@
   onMount(connect);
 
   function tap(id: string, button: import("./lib/types").Button) {
-    // Volume "buttons" fire-and-forget on the client side: we don't need the
-    // server to round-trip the press for an action that's already a slider
-    // control. Mute is the one we want to keep on tap.
     if (button.action.kind === "volume" && button.id === "vol-mute") {
       toggleMuteSystem();
       if (navigator.vibrate) navigator.vibrate(8);
@@ -75,19 +71,48 @@
   </header>
 
   {#if currentPage}
-    <section
-      class="grid"
-      class:volume={isVolumePage}
-      style="grid-template-columns: repeat({currentPage.columns}, 1fr);"
-    >
-      {#each currentPage.buttons as button (button.id)}
-        {#if button.action.kind === "volume" && button.id === "vol-master" && button.action.target}
-          <VolumeSlider
-            target={button.action.target}
-            label={button.label}
-            symbol={button.symbol ?? "speaker.wave.2.fill"}
-          />
-        {:else}
+    {#if isVolumePage}
+      <!-- Custom render for the Volume page: master on top, then a
+           live-updating list of apps. The list is dynamic (apps appear when
+           they start playing, disappear when they stop) and lives entirely
+           in the server-pushed `apps` state. -->
+      <section class="volume-page">
+        {#if deck.systemVolume != null}
+          <div class="master-row">
+            <VolumeSlider
+              target="system"
+              label="Master"
+              symbol="speaker.wave.2.fill"
+              orientation="horizontal"
+            />
+          </div>
+        {/if}
+
+        <div class="apps">
+          <div class="apps-header">
+            <span>Apps playing audio</span>
+            <span class="apps-count">{deck.apps.length}</span>
+          </div>
+          {#if deck.apps.length === 0}
+            <div class="apps-empty">
+              Nothing playing right now. Start some audio on another app
+              and it'll show up here.
+            </div>
+          {:else}
+            <div class="apps-list">
+              {#each deck.apps as app (app.id)}
+                <AppVolumeSlider {app} />
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </section>
+    {:else}
+      <section
+        class="grid"
+        style="grid-template-columns: repeat({currentPage.columns}, 1fr);"
+      >
+        {#each currentPage.buttons as button (button.id)}
           <button
             class="key"
             class:acked={deck.lastAck?.buttonId === button.id && deck.lastAck?.ok}
@@ -102,9 +127,9 @@
             {/if}
             <span class="label">{button.label}</span>
           </button>
-        {/if}
-      {/each}
-    </section>
+        {/each}
+      </section>
+    {/if}
 
     {#if pages.length > 1}
       <footer class="dots">
@@ -159,11 +184,6 @@
     display: grid;
     gap: 12px;
     align-content: start;
-  }
-  .grid.volume {
-    /* The volume page has one tall slider and one square mute button; let
-       the row stretch to fill the available space. */
-    align-content: stretch;
   }
 
   .key {
@@ -247,5 +267,62 @@
     display: grid;
     place-items: center;
     color: color-mix(in srgb, var(--wd-text) 55%, transparent);
+  }
+
+  /* ---- Volume page ---- */
+
+  .volume-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  .master-row {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .apps {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+  }
+  .apps-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: color-mix(in srgb, var(--wd-text) 60%, transparent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .apps-count {
+    background: color-mix(in srgb, var(--wd-accent) 25%, transparent);
+    color: var(--wd-text);
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+  .apps-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .apps-empty {
+    padding: 18px;
+    border-radius: var(--wd-radius);
+    background: color-mix(in srgb, var(--wd-surface) 60%, transparent);
+    color: color-mix(in srgb, var(--wd-text) 55%, transparent);
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
   }
 </style>
