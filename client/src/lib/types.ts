@@ -46,14 +46,28 @@ export interface Theme {
   radius: number;
 }
 
+/// Per-app audio snapshot. The id is an opaque string (CoreAudio
+/// AudioObjectID on the server). `volume` is 0..2 (2 = boost).
+export interface AudioApp {
+  id: string;
+  name: string;
+  icon?: string | null;
+  playing: boolean;
+  volume: number;
+  muted: boolean;
+}
+
 // server -> client
 export type ServerMessage =
   | { type: "layout"; data: Layout }
   | { type: "ack"; buttonId: string; ok: boolean }
-  | { type: "volume"; target: VolumeTarget; value: number };
+  | { type: "volume"; target: VolumeTarget; value: number }
+  | { type: "apps"; list: AudioApp[] }
+  | { type: "appVolume"; id: string; volume: number; muted: boolean };
 
 // client -> server
 export type ClientMessage =
   | { type: "hello"; name?: string }
   | { type: "press"; buttonId: string }
-  | { type: "volume"; target: VolumeTarget; value: number };
+  | { type: "volume"; target: VolumeTarget; value: number }
+  | { type: "setAppVolume"; id: string; value: number; muted: boolean };

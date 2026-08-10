@@ -88,6 +88,23 @@ struct Theme: Codable {
     )
 }
 
+// MARK: Per-app audio
+
+/// Snapshot of one audio process, sent to clients. `id` is the opaque
+/// Core Audio process object id, serialized as a string because JS doesn't
+/// have a fixed-width 32-bit type. `icon` is a PNG data URL when the
+/// running app has one (most foreground apps do; helpers don't).
+struct AudioApp: Codable {
+    var id: String
+    var name: String
+    var icon: String?
+    var playing: Bool
+    /// 0…maxGain (0 = mute, 1 = unity, 2 = boost). Reflects the controller's
+    /// stored slider position even when not currently tapped.
+    var volume: Float
+    var muted: Bool
+}
+
 // MARK: Messages
 
 /// server -> client
@@ -97,9 +114,16 @@ enum ServerMessage: Codable {
     /// Current system volume (0…1). Pushed on connect and whenever the value
     /// changes from any source (slider on the client, macOS menu bar, keys).
     case volume(target: VolumeTarget, value: Float)
+    /// Snapshot of every audio process the server currently sees, refreshed
+    /// periodically. Replaces the prior list on the client.
+    case apps(list: [AudioApp])
+    /// Per-app volume or mute change. Fired after the controller applies a
+    /// client-driven set (so other clients can mirror it) and on connect
+    /// for any app that already has a non-default stored level.
+    case appVolume(id: String, volume: Float, muted: Bool)
 
     private enum CodingKeys: String, CodingKey {
-        case type, data, buttonId, ok, target, value
+        case type, data, buttonId, ok, target, value, list, id, volume, muted
     }
 
     func encode(to encoder: Encoder) throws {
@@ -116,6 +140,14 @@ enum ServerMessage: Codable {
             try c.encode("volume", forKey: .type)
             try c.encode(target, forKey: .target)
             try c.encode(value, forKey: .value)
+        case .apps(let list):
+            try c.encode("apps", forKey: .type)
+            try c.encode(list, forKey: .list)
+        case .appVolume(let id, let volume, let muted):
+            try c.encode("appVolume", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(volume, forKey: .volume)
+            try c.encode(muted, forKey: .muted)
         }
     }
 
@@ -127,6 +159,11 @@ enum ServerMessage: Codable {
                                 ok: try c.decode(Bool.self, forKey: .ok))
         case "volume": self = .volume(target: try c.decode(VolumeTarget.self, forKey: .target),
                                       value: try c.decode(Float.self, forKey: .value))
+        case "apps": self = .apps(list: try c.decode([AudioApp].self, forKey: .list))
+        case "appVolume":
+            self = .appVolume(id: try c.decode(String.self, forKey: .id),
+                              volume: try c.decode(Float.self, forKey: .volume),
+                              muted: try c.decode(Bool.self, forKey: .muted))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown server message")
         }
@@ -141,8 +178,14 @@ enum ClientMessage: Decodable {
     /// (0…1) and is fire-and-forget — there's no per-message ack; the server
     /// broadcasts the new level back so all clients stay in sync.
     case volume(target: VolumeTarget, value: Float)
+    /// Set a per-app slider position. The server will lazily create a tap on
+    /// the first call for a given app id (which is the moment macOS will prompt
+    /// the user for audio capture permission). `muted` flips the mute bit
+    /// independently of `value`; the server treats a 0 value as "muted via
+    /// slider" but the two concepts are kept separate for cleaner state.
+    case setAppVolume(id: String, value: Float, muted: Bool)
 
-    private enum CodingKeys: String, CodingKey { case type, name, buttonId, target, value }
+    private enum CodingKeys: String, CodingKey { case type, name, buttonId, target, value, id, muted }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -152,6 +195,10 @@ enum ClientMessage: Decodable {
         case "volume":
             self = .volume(target: try c.decode(VolumeTarget.self, forKey: .target),
                            value: try c.decode(Float.self, forKey: .value))
+        case "setAppVolume":
+            self = .setAppVolume(id: try c.decode(String.self, forKey: .id),
+                                 value: try c.decode(Float.self, forKey: .value),
+                                 muted: try c.decode(Bool.self, forKey: .muted))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown client message")
         }
