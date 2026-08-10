@@ -18,6 +18,7 @@ struct WebDeckApp: App {
         Window("WebDeck", id: WindowID.config) {
             ConfigView()
                 .environmentObject(appDelegate.server)
+                .environmentObject(appDelegate.permissions)
         }
         .windowResizability(.contentSize)
     }
@@ -31,6 +32,7 @@ enum WindowID {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let server = Server()
+    let permissions = Permissions()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         server.start()
