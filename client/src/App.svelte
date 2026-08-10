@@ -13,31 +13,65 @@
   const currentPage = $derived(pages[pageIndex] ?? null);
   const isVolumePage = $derived(currentPage?.id === "p4" ?? false);
 
-  // Pick a column count that fits the viewport. Portrait phones keep the
-  // editor's column count; landscape phones get more columns so all rows
-  // fit on screen (no scrolling, matching a real Stream Deck). Tablets
-  // get the editor's count regardless of orientation.
+  // Resolve the orientation we'll render for. An orientation lock
+  // pinned to a page forces the layout (and the cell size cap) to
+  // match that orientation even if the device is currently held the
+  // other way. The page also exposes per-orientation column counts,
+  // so the editor can set "3 columns portrait, 6 columns landscape"
+  // and we pick the right one here.
+  const renderOrientation = $derived.by((): "portrait" | "landscape" => {
+    if (!currentPage) return viewportW > viewportH ? "landscape" : "portrait";
+    if (currentPage.orientationLock) return currentPage.orientationLock;
+    return viewportW > viewportH ? "landscape" : "portrait";
+  });
+
+  // When the editor's configured column count would be wrong for the
+  // current orientation (the page only set `columns`, not the
+  // portrait/landscape variants), phone landscape doubles it so the
+  // page fits without scrolling.
   const effectiveColumns = $derived.by(() => {
     if (!currentPage) return 3;
-    const isLandscape = viewportW > viewportH;
+    const perOrientation =
+      renderOrientation === "portrait"
+        ? currentPage.columnsPortrait
+        : currentPage.columnsLandscape;
+    if (perOrientation != null) return perOrientation;
+
+    const isLandscape = renderOrientation === "landscape";
     const isPhoneSize = Math.max(viewportW, viewportH) < 900;
     if (isLandscape && isPhoneSize) {
-      // Double columns so the page is one or two rows wide in landscape.
       return Math.max(currentPage.columns, currentPage.columns * 2);
     }
     return currentPage.columns;
   });
 
+  // True when the rendered orientation doesn't match the device's
+  // actual orientation — used to nudge the user to rotate.
+  const orientationMismatch = $derived.by(() => {
+    if (!currentPage?.orientationLock) return false;
+    return currentPage.orientationLock === "portrait"
+      ? viewportW > viewportH
+      : viewportW < viewportH;
+  });
+
   // Per-cell size cap, in CSS pixels: the smaller of (column width,
   // available height / row count). Lets a 3-col 6-button page render
   // as 3x2 on any phone, regardless of orientation, without scrolling.
+  // When the page pins a different orientation via orientationLock,
+  // the cap uses that orientation's dimensions so the layout is
+  // visually consistent (the user will see the same cell size once
+  // they rotate the device to match).
   const cellMaxPx = $derived.by(() => {
     const cols = effectiveColumns;
-    const rows = Math.max(1, Math.ceil(currentPage?.buttons.length ?? 0 / cols));
-    // Account for gaps (12px) and padding around the grid (14*2=28).
-    const widthFit = (viewportW - 28 - (cols - 1) * 12) / cols;
-    // Header (~40) + dots (~16) + home indicator (~30) + safe area.
-    const heightAvailable = viewportH - 40 - 16 - 30 - 40;
+    const buttons = currentPage?.buttons.length ?? 0;
+    const rows = Math.max(1, Math.ceil(buttons / cols));
+    // Swap width/height when the page is locked to the opposite
+    // orientation from the device's current one.
+    const locked = renderOrientation === "landscape";
+    const widthAxis = locked ? viewportH : viewportW;
+    const heightAxis = locked ? viewportW : viewportH;
+    const widthFit = (widthAxis - 28 - (cols - 1) * 12) / cols;
+    const heightAvailable = heightAxis - 40 - 16 - 30 - 40;
     const heightFit = heightAvailable / rows;
     return Math.max(40, Math.min(widthFit, heightFit));
   });
@@ -110,7 +144,11 @@
     <span class="dot" class:online={deck.status === "open"}></span>
     <span class="title">{currentPage?.name ?? "WebDeck"}</span>
     <span class="status">
-      {#if deck.status === "open"}connected
+      {#if orientationMismatch}
+        <span class="rotate-hint">
+          ↻ rotate to {currentPage?.orientationLock}
+        </span>
+      {:else if deck.status === "open"}connected
       {:else if deck.status === "connecting"}connecting…
       {:else}reconnecting…{/if}
     </span>
@@ -223,6 +261,10 @@
     margin-left: auto;
     color: color-mix(in srgb, var(--wd-text) 55%, transparent);
     font-size: 13px;
+  }
+  .rotate-hint {
+    color: var(--wd-accent);
+    font-weight: 600;
   }
 
   .grid {
