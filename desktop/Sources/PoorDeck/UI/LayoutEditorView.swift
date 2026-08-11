@@ -496,16 +496,13 @@ private struct ButtonForm: View {
                             TextField("Label", text: binding(\.label))
                                 .textFieldStyle(.roundedBorder)
                         }
-                        LabeledField(label: "Symbol") {
-                            HStack(spacing: 8) {
-                                TextField("SF Symbol name",
-                                          text: bindingOptional(\.symbol, default: "app.fill"))
-                                    .textFieldStyle(.roundedBorder)
-                                Image(systemName: button.symbol ?? "app.fill")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 22, height: 22)
-                            }
+                        LabeledField(label: usesAppIcon ? "Fallback icon" : "Icon") {
+                            SymbolField(
+                                symbol: bindingOptional(\.symbol, default: "app.fill")
+                            )
+                        }
+                        if usesAppIcon {
+                            actionHint("This button shows \(appIconLabel) own icon on the deck. The icon above is only used if that app isn't installed on this Mac.")
                         }
                     }
 
@@ -524,9 +521,8 @@ private struct ButtonForm: View {
                         case .none:
                             actionHint("This button does nothing on tap.")
                         case .openApp:
-                            LabeledField(label: "Bundle id") {
-                                TextField("com.example.app", text: bindingForBundleId())
-                                    .textFieldStyle(.roundedBorder)
+                            LabeledField(label: "Application") {
+                                AppPicker(bundleId: bindingForBundleId())
                             }
                         case .keyShortcut:
                             ShortcutEditor(button: button, onChange: onChange)
@@ -600,6 +596,20 @@ private struct ButtonForm: View {
         case .keyShortcut: return "Keyboard shortcut"
         case .volume: return "System volume"
         }
+    }
+
+    /// True when this button carries a bundle id that resolves to an installed
+    /// app. `resolvedLayout()` bakes that app's own icon into the tile, and the
+    /// baked icon always wins over `symbol` — so the symbol is only a fallback.
+    private var usesAppIcon: Bool {
+        resolvedAppName != nil
+    }
+    private var resolvedAppName: String? {
+        button.action.bundleId.flatMap { AppLauncher.displayName(bundleId: $0) }
+    }
+    private var appIconLabel: String {
+        if let name = resolvedAppName { return "\(name)'s" }
+        return "the app's"
     }
 
     /// A section: a small uppercase header over its fields, matching the
@@ -681,8 +691,8 @@ private struct ShortcutEditor: View {
             LabeledField(label: "Modifiers") {
                 ModifierChips(button: button, onChange: onChange)
             }
-            LabeledField(label: "Activate app") {
-                TextField("(optional) bundle id", text: Binding(
+            LabeledField(label: "Activate app (optional)") {
+                AppPicker(bundleId: Binding(
                     get: { button.action.bundleId ?? "" },
                     set: { newValue in
                         var updated = button
@@ -732,6 +742,180 @@ private struct ModifierChips: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+// MARK: - Symbol field
+
+/// An icon chooser for the button's SF Symbol. Rather than asking the user to
+/// recall an exact symbol string, it pairs a live preview with a "Browse"
+/// popover of common symbols, and flags names that don't resolve so a typo is
+/// obvious instead of silently showing a blank tile.
+private struct SymbolField: View {
+    @Binding var symbol: String
+    @State private var browsing = false
+
+    private var isValid: Bool { symbolExists(symbol) }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Live preview of whatever is currently typed/picked.
+            Image(systemName: isValid ? symbol : "questionmark.square.dashed")
+                .font(.system(size: 16))
+                .foregroundStyle(isValid ? Color.primary : Color.orange)
+                .frame(width: 24, height: 24)
+
+            TextField("SF Symbol name", text: $symbol)
+                .textFieldStyle(.roundedBorder)
+
+            Button {
+                browsing.toggle()
+            } label: {
+                Image(systemName: "square.grid.2x2")
+            }
+            .buttonStyle(.bordered)
+            .help("Browse common symbols")
+            .popover(isPresented: $browsing, arrowEdge: .bottom) {
+                SymbolBrowser(selected: symbol) { picked in
+                    symbol = picked
+                    browsing = false
+                }
+            }
+        }
+        if !isValid {
+            Text("No SF Symbol named \"\(symbol)\". Try Browse, or see Apple's SF Symbols app for exact names.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// A compact grid of frequently-used symbols for the Browse popover. Not the
+/// full SF Symbols catalog — just enough that most buttons never need the text
+/// field, with the free-text field still there for anything exotic.
+private struct SymbolBrowser: View {
+    let selected: String
+    let onPick: (String) -> Void
+
+    private let symbols = [
+        "app.fill", "star.fill", "heart.fill", "bolt.fill",
+        "house.fill", "gearshape.fill", "folder.fill", "doc.fill",
+        "keyboard", "terminal.fill", "command", "power",
+        "play.fill", "pause.fill", "forward.fill", "backward.fill",
+        "speaker.wave.2.fill", "speaker.slash.fill", "mic.fill", "music.note",
+        "camera.fill", "video.fill", "photo.fill", "paintbrush.fill",
+        "envelope.fill", "message.fill", "phone.fill", "bell.fill",
+        "magnifyingglass", "arrow.clockwise", "trash.fill", "lock.fill",
+        "globe", "safari.fill", "calendar", "clock.fill",
+        "sun.max.fill", "moon.fill", "wifi", "battery.100",
+    ]
+
+    private let columns = Array(repeating: GridItem(.fixed(40), spacing: 6), count: 6)
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(symbols, id: \.self) { name in
+                    Button {
+                        onPick(name)
+                    } label: {
+                        Image(systemName: name)
+                            .font(.system(size: 18))
+                            .frame(width: 38, height: 38)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(name == selected
+                                          ? Color.accentColor.opacity(0.25)
+                                          : Color.primary.opacity(0.06))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(name)
+                }
+            }
+            .padding(12)
+        }
+        .frame(width: 288, height: 240)
+    }
+}
+
+/// Whether an SF Symbol name resolves to a real symbol on this system.
+private func symbolExists(_ name: String) -> Bool {
+    !name.isEmpty && NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
+}
+
+// MARK: - App picker
+
+/// Choose the target application by picking it from disk, not by typing a
+/// reverse-DNS bundle id nobody remembers. Shows the resolved app's real icon
+/// and name once set; keeps the raw id visible (and editable) underneath for
+/// apps that aren't installed on this Mac.
+private struct AppPicker: View {
+    @Binding var bundleId: String
+
+    private var resolvedName: String? {
+        bundleId.isEmpty ? nil : AppLauncher.displayName(bundleId: bundleId)
+    }
+    private var iconURL: String? {
+        bundleId.isEmpty ? nil : AppLauncher.iconDataURL(bundleId: bundleId, size: 44)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                iconView
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(resolvedName ?? (bundleId.isEmpty ? "No app chosen" : bundleId))
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    if resolvedName != nil {
+                        Text(bundleId)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if !bundleId.isEmpty {
+                        Text("Not installed on this Mac")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Spacer(minLength: 6)
+                Button("Choose…") {
+                    if let picked = AppLauncher.chooseApp() {
+                        bundleId = picked.bundleId
+                    }
+                }
+                .controlSize(.small)
+            }
+
+            // Escape hatch: type a bundle id directly (e.g. for an app that
+            // lives outside /Applications or isn't installed here yet).
+            DisclosureGroup("Enter bundle id manually") {
+                TextField("com.example.app", text: $bundleId)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.top, 4)
+            }
+            .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+            if let iconURL, let img = DevicePreview.imageFromDataURL(iconURL) {
+                Image(nsImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .padding(4)
+            } else {
+                Image(systemName: "app.dashed")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 34, height: 34)
     }
 }
 
