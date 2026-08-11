@@ -47,10 +47,56 @@
     }
   }
 
+  // Running as an installed PWA (no browser chrome). When true we
+  // reclaim the chrome we no longer need: tighter padding and a larger
+  // key cap, so the deck uses the roomier canvas.
+  let standalone = $state(false);
+  // Roomier cap once installed — there's no URL bar eating the screen.
+  const keyMax = $derived(standalone ? 280 : KEY_MAX);
+
+  // "Add to Home Screen" CTA. On Android/Chrome we capture the
+  // `beforeinstallprompt` event and drive a native prompt; iOS has no
+  // such API, so we show a short "Share → Add to Home Screen" hint.
+  // Never shown once installed, and dismissible (persisted).
+  let installEvt = $state<{
+    prompt: () => void;
+    userChoice: Promise<unknown>;
+  } | null>(null);
+  let installDismissed = $state(false);
+  const isIOS =
+    typeof navigator !== "undefined" &&
+    (/iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase()) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+  const showInstall = $derived(
+    !standalone && !installDismissed && (installEvt != null || isIOS),
+  );
+  function dismissInstall() {
+    installDismissed = true;
+    try {
+      localStorage.setItem("poordeck.installDismissed", "1");
+    } catch {
+      /* ignore */
+    }
+  }
+  async function doInstall() {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try {
+      await installEvt.userChoice;
+    } finally {
+      installEvt = null;
+    }
+  }
+
   const pages = $derived(deck.layout?.pages ?? []);
   const theme = $derived(deck.layout?.theme ?? null);
   const currentPage = $derived(pages[pageIndex] ?? null);
-  const isVolumePage = $derived(currentPage?.id === "p4" ?? false);
+  // The Volume page gets a bespoke render (master + live app list). Detect
+  // it by content, not a hardcoded id — inserting the Media page shifted
+  // ids once already and left this pointing at the wrong page.
+  const isVolumePage = $derived(
+    currentPage?.buttons.some((b) => b.action.kind === "volume") ?? false,
+  );
 
   // Resolve the orientation we'll render for. An orientation lock
   // pinned to a page forces the layout to match that orientation even
@@ -122,10 +168,10 @@
   const keyPx = $derived.by(() => {
     const cols = effectiveColumns;
     const rows = rowCount;
-    if (gridW === 0 || gridH === 0) return KEY_MAX;
+    if (gridW === 0 || gridH === 0) return keyMax;
     const cellW = (gridW - (cols - 1) * GAP) / cols;
     const cellH = (gridH - (rows - 1) * GAP) / rows;
-    return Math.max(40, Math.min(cellW, cellH, KEY_MAX));
+    return Math.max(40, Math.min(cellW, cellH, keyMax));
   });
 
   // True when the device is being held the wrong way relative to the
@@ -142,12 +188,44 @@
 
   onMount(() => {
     const landscapeMq = window.matchMedia("(orientation: landscape)");
+    const standaloneMq = window.matchMedia("(display-mode: standalone)");
     const sync = () => {
       deviceLandscape = landscapeMq.matches;
+      // iOS reports install state via navigator.standalone, not the
+      // display-mode media query.
+      standalone =
+        standaloneMq.matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone ===
+          true;
     };
     sync();
+    try {
+      installDismissed =
+        localStorage.getItem("poordeck.installDismissed") === "1";
+    } catch {
+      /* ignore */
+    }
+
+    // Android/Chrome: intercept the browser's install prompt so we can
+    // offer it from our own CTA at a better moment.
+    const onBIP = (e: Event) => {
+      e.preventDefault();
+      installEvt = e as unknown as typeof installEvt;
+    };
+    const onInstalled = () => {
+      installEvt = null;
+      standalone = true;
+    };
+    window.addEventListener("beforeinstallprompt", onBIP);
+    window.addEventListener("appinstalled", onInstalled);
     landscapeMq.addEventListener("change", sync);
-    return () => landscapeMq.removeEventListener("change", sync);
+    standaloneMq.addEventListener("change", sync);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBIP);
+      window.removeEventListener("appinstalled", onInstalled);
+      landscapeMq.removeEventListener("change", sync);
+      standaloneMq.removeEventListener("change", sync);
+    };
   });
 
   // Measure the grid box and keep gridW/gridH in sync. A ResizeObserver
@@ -239,6 +317,7 @@
 
 <main
   class="deck"
+  class:standalone
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
 >
@@ -379,6 +458,29 @@
       {#if deck.status === "open"}Waiting for layout…{:else}Connecting to PoorDeck…{/if}
     </div>
   {/if}
+
+  {#if showInstall}
+    <aside class="install" role="note">
+      <img class="install-icon" src="./icons/icon-192.png" alt="" />
+      <div class="install-text">
+        {#if installEvt}
+          <b>Install PoorDeck</b>
+          <span>Full-screen, one tap from your home screen.</span>
+        {:else}
+          <b>Add to Home Screen</b>
+          <span>Tap Share, then “Add to Home Screen”.</span>
+        {/if}
+      </div>
+      {#if installEvt}
+        <button class="install-add" onclick={doInstall}>Add</button>
+      {/if}
+      <button
+        class="install-x"
+        onclick={dismissInstall}
+        aria-label="Dismiss">✕</button
+      >
+    </aside>
+  {/if}
 </main>
 
 <style>
@@ -389,6 +491,12 @@
     padding: 14px;
     gap: 12px;
     transform-origin: center center;
+  }
+  /* Installed PWA: no browser chrome, so tighten our own padding and
+     let keys breathe into the reclaimed space. */
+  .deck.standalone {
+    padding: 8px 10px;
+    gap: 8px;
   }
 
   .bar {
@@ -474,12 +582,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6%;
     border: none;
     border-radius: var(--wd-radius);
     /* Square mode: fixed square edge. Fill mode overrides to 100%. */
     width: var(--key, 180px);
     height: var(--key, 180px);
+    /* Query container so icon + label scale with the button's real
+       size (cqmin = the shorter edge) — works in both square and fill
+       mode with no JS. */
+    container-type: size;
     background: var(--wd-surface);
     color: var(--wd-text);
     cursor: pointer;
@@ -498,43 +610,47 @@
     box-shadow: 0 0 0 2px var(--wd-accent);
   }
 
+  /* Sizes are in cqmin (% of the button's shorter edge) so art + text
+     scale with the key, in both square and fill mode. */
   .icon {
-    width: 46%;
-    height: 46%;
+    width: 56cqmin;
+    height: 56cqmin;
     object-fit: contain;
     pointer-events: none;
   }
   .glyph {
-    width: 46%;
-    height: 46%;
+    width: 54cqmin;
+    height: 54cqmin;
     display: grid;
     place-items: center;
-    font-size: 24px;
+    font-size: 30cqmin;
     font-weight: 700;
-    border-radius: 12px;
+    border-radius: 14%;
     background: var(--wd-accent);
     color: #fff;
   }
-  /* Media / transport glyphs read better large and on a neutral tile than the
-     accent-filled single-letter fallback. */
+  /* Media / transport glyphs: no tile, just a big glyph filling the key. */
   .symbol-glyph {
-    font-size: 30px;
-    background: color-mix(in srgb, var(--wd-text) 12%, transparent);
+    width: auto;
+    height: auto;
+    background: none;
     color: var(--wd-text);
+    font-size: 64cqmin;
+    line-height: 1;
   }
   .combo {
     display: grid;
     place-items: center;
     min-width: 46%;
-    padding: 8px 12px;
-    font-size: 22px;
+    padding: 0.4em 0.6em;
+    font-size: 22cqmin;
     font-weight: 600;
     border-radius: 12px;
     background: color-mix(in srgb, var(--wd-text) 10%, transparent);
     border: 1px solid color-mix(in srgb, var(--wd-text) 18%, transparent);
   }
   .label {
-    font-size: 12px;
+    font-size: clamp(11px, 15cqmin, 20px);
     opacity: 0.85;
     max-width: 100%;
     overflow: hidden;
@@ -667,5 +783,81 @@
     font-size: 13px;
     line-height: 1.4;
     text-align: center;
+  }
+
+  /* ---- Install (Add to Home Screen) CTA ---- */
+
+  .install {
+    position: fixed;
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--wd-surface) 92%, var(--wd-bg));
+    border: 1px solid color-mix(in srgb, var(--wd-text) 12%, transparent);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    animation: install-in 0.25s ease;
+  }
+  @keyframes install-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  .install-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    flex: none;
+  }
+  .install-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    font-size: 13px;
+  }
+  .install-text b {
+    font-weight: 600;
+  }
+  .install-text span {
+    color: color-mix(in srgb, var(--wd-text) 60%, transparent);
+    font-size: 12px;
+  }
+  .install-add {
+    margin-left: auto;
+    flex: none;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 999px;
+    background: var(--wd-accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .install-x {
+    flex: none;
+    margin-left: auto;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--wd-text) 10%, transparent);
+    color: color-mix(in srgb, var(--wd-text) 70%, transparent);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  /* When the Add button is present it owns the right side; the ✕ then
+     sits snug next to it rather than pushing to the far edge. */
+  .install-add ~ .install-x {
+    margin-left: 0;
   }
 </style>
