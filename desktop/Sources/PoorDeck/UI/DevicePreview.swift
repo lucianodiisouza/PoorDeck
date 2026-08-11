@@ -132,8 +132,13 @@ struct DevicePreview: View {
     private var deviceFrame: some View {
         GeometryReader { geo in
             let aspect = device.aspect
-            let portraitAspect = aspect.height / aspect.width
-            let landscapeAspect = aspect.width / aspect.height
+            // `sizeThatFits` treats `target` as a width/height ratio. Portrait
+            // is the tall orientation (width < height, ratio < 1); landscape is
+            // wide (ratio > 1). These were previously swapped, so every
+            // orientation rendered as its opposite — which is why the default
+            // preview looked landscape and "Follow device" appeared inverted.
+            let portraitAspect = aspect.width / aspect.height
+            let landscapeAspect = aspect.height / aspect.width
             let isPortrait = effectivePortrait
             let target = isPortrait ? portraitAspect : landscapeAspect
             let available = geo.size
