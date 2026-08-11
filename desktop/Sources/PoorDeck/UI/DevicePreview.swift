@@ -199,9 +199,8 @@ struct DevicePreview: View {
             // The actual grid — sized to the remaining height so its rows
             // fit the available area without overflowing the device.
             grid(of: screenWidth, height: gridArea)
-                .padding(.horizontal, max(6, screenWidth * 0.025))
-                .padding(.top, max(4, screenHeight * 0.012))
-                .frame(height: gridArea, alignment: .top)
+                .padding(.horizontal, 14)
+                .frame(height: gridArea, alignment: .center)
 
             Spacer(minLength: 0)
 
@@ -285,27 +284,52 @@ struct DevicePreview: View {
 
     @ViewBuilder
     private func grid(of screenWidth: CGFloat, height screenHeight: CGFloat) -> some View {
-        // Mirrors the client's CSS: padding 14 around the grid, 12px
-        // gap between cells, square cells capped to fit the rows in
-        // the available height (with a label at the bottom).
-        let cols = max(1, page.columns(forPortrait: effectivePortrait))
-        let rows = max(1, Int(ceil(Double(page.buttons.count) / Double(cols))))
+        // Mirrors the client: 14px padding, 12px gap, and — crucially —
+        // the same auto-fit packing. Instead of a fixed column count the
+        // client picks whichever grid shape makes the square keys largest
+        // for the available box, then centers the block. Keeping this in
+        // sync is why the preview now matches the phone.
+        let n = page.buttons.count
         let gap: CGFloat = 12
         let availableWidth = screenWidth - 28
-        let cellWidth = (availableWidth - CGFloat(cols - 1) * gap) / CGFloat(cols)
-        // Height budget = screen height - status bar (24) - chrome
-        // header (40) - dots (16) - home indicator (30) - padding (12).
-        let heightBudget = max(40, screenHeight - 24 - 40 - 16 - 30 - 12)
-        let cellFromWidth = cellWidth
-        let cellFromHeight = (heightBudget - CGFloat(rows - 1) * gap) / CGFloat(rows)
-        let cellSide = min(cellFromWidth, cellFromHeight)
+        // Height budget = grid area - dots (16) - home indicator (30) -
+        // inner padding (12). (The status bar + header were already
+        // subtracted before this function is called.)
+        let heightBudget = max(40, screenHeight - 16 - 30 - 12)
 
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellWidth), spacing: gap), count: cols),
+        // Explicit per-orientation columns win (as on the client);
+        // otherwise auto-fit by maximizing the fitting square edge.
+        let explicit = effectivePortrait ? page.columnsPortrait : page.columnsLandscape
+        let cols: Int = {
+            if let e = explicit, e > 0 { return e }
+            guard n > 1 else { return 1 }
+            var best = 1
+            var bestEdge: CGFloat = -1
+            for c in 1...n {
+                let r = Int(ceil(Double(n) / Double(c)))
+                let cw = (availableWidth - CGFloat(c - 1) * gap) / CGFloat(c)
+                let ch = (heightBudget - CGFloat(r - 1) * gap) / CGFloat(r)
+                let edge = min(cw, ch)
+                if edge > bestEdge + 0.5 { bestEdge = edge; best = c }
+            }
+            return best
+        }()
+
+        let rows = max(1, Int(ceil(Double(max(n, 1)) / Double(cols))))
+        let cellFromWidth = (availableWidth - CGFloat(cols - 1) * gap) / CGFloat(cols)
+        let cellFromHeight = (heightBudget - CGFloat(rows - 1) * gap) / CGFloat(rows)
+        // Proportional cap: the client caps keys at 220px on a real
+        // device; scale that into the preview so the mock stays faithful.
+        let cap = (220.0 / device.aspect.width) * screenWidth
+        let cellSide = max(20, min(cellFromWidth, cellFromHeight, cap))
+
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellSide), spacing: gap), count: cols),
                   spacing: gap) {
             ForEach(page.buttons) { button in
                 previewCell(for: button, side: cellSide)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private func previewCell(for button: DeckButton, side: CGFloat) -> some View {
@@ -316,7 +340,10 @@ struct DevicePreview: View {
             // Same proportions the client uses: 46% icon, 12px label,
             // radius from the theme. The .icon fits inside an inner
             // padding so the cell reads like the real one on the phone.
-            VStack(spacing: 6) {
+            // Art + label sized as on the client: ~56% art, and a label
+            // that scales with the key instead of a fixed 12pt. Media
+            // glyphs render large with no inner tile.
+            VStack(spacing: side * 0.06) {
                 ZStack {
                     RoundedRectangle(cornerRadius: side * 0.15)
                         .fill(Color(red: 0.11, green: 0.12, blue: 0.15))
@@ -325,10 +352,10 @@ struct DevicePreview: View {
                             .resizable()
                             .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
-                            .padding(side * 0.27)
+                            .padding(side * 0.22)
                     } else {
                         Image(systemName: button.symbol ?? "questionmark.square")
-                            .font(.system(size: side * 0.46))
+                            .font(.system(size: side * (button.action.kind == .media ? 0.6 : 0.5)))
                             .foregroundStyle(Color.white)
                     }
                 }
@@ -338,7 +365,7 @@ struct DevicePreview: View {
                         .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
                 )
                 Text(button.label)
-                    .font(.system(size: 12))
+                    .font(.system(size: min(20, max(10, side * 0.15))))
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
                     .truncationMode(.tail)
