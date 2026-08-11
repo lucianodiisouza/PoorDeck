@@ -450,6 +450,9 @@ struct LayoutEditorView: View {
             id: page.id,
             name: page.name,
             columns: page.columns,
+            columnsPortrait: page.columnsPortrait,
+            columnsLandscape: page.columnsLandscape,
+            orientationLock: page.orientationLock,
             buttons: page.buttons.map { btn in
                 var copy = btn
                 if copy.icon == nil { copy.icon = iconByID[btn.id] ?? nil }

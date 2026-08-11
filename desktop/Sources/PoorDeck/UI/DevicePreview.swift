@@ -288,7 +288,7 @@ struct DevicePreview: View {
         // Mirrors the client's CSS: padding 14 around the grid, 12px
         // gap between cells, square cells capped to fit the rows in
         // the available height (with a label at the bottom).
-        let cols = max(1, page.columns)
+        let cols = max(1, page.columns(forPortrait: effectivePortrait))
         let rows = max(1, Int(ceil(Double(page.buttons.count) / Double(cols))))
         let gap: CGFloat = 12
         let availableWidth = screenWidth - 28
