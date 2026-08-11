@@ -268,15 +268,18 @@
   });
 
   // Enforce the page's orientation lock on the device itself. Safari
-  // 16.4+ supports `screen.orientation.lock()` but it (a) requires a
-  // user gesture in some contexts and (b) only takes effect if the
-  // user grants the permission. We attempt it; on failure (older
-  // Safari, denial) the `orientationMismatch` hint above tells the
-  // user to rotate. We never rotate the content — the page renders
-  // in the locked orientation and the user has to hold the device
-  // the right way.
+  // 16.4+ nominally supports `screen.orientation.lock()`, but iOS Safari
+  // does NOT (orientation there is governed by the web-app manifest) and —
+  // worse — calling it in an `apple-mobile-web-app-capable` context makes
+  // WebKit terminate and reload the page in a tight loop (close code 1001,
+  // milliseconds after the socket opens), so the deck can never connect. We
+  // skip the API entirely on iOS (see `isIOS` above); the
+  // `orientationMismatch` hint below is the fallback there. On failure
+  // elsewhere (permission denied) the same hint tells the user to rotate.
+  // We never rotate the content — the page renders in the locked
+  // orientation and the user has to hold the device the right way.
   $effect(() => {
-    if (typeof screen === "undefined") return;
+    if (typeof screen === "undefined" || isIOS) return;
     const lock = currentPage?.orientationLock;
     const so = (screen as Screen & {
       orientation?: {
