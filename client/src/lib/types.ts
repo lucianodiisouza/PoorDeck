@@ -105,7 +105,7 @@ export type ServerMessage =
 
 // client -> server
 export type ClientMessage =
-  | { type: "hello"; name?: string }
+  | { type: "hello"; name?: string; deviceId?: string }
   | { type: "press"; buttonId: string }
   | { type: "volume"; target: VolumeTarget; value: number }
   | { type: "setAppVolume"; id: string; value: number; muted: boolean }

@@ -58,6 +58,28 @@ export const deck = $state<{
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+/// A stable per-device id. Persisted in localStorage so a reload, a
+/// reconnect, or the PWA's service worker all report the *same* device —
+/// that's how the desktop counts one phone as one device instead of two or
+/// three. Generated once and reused forever.
+function deviceId(): string {
+  const key = "poordeck.deviceId";
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    // Private mode / storage disabled — fall back to a per-session id.
+    return `dev-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 function wsURL(): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${location.host}/ws`;
@@ -70,7 +92,7 @@ export function connect(): void {
 
   ws.onopen = () => {
     deck.status = "open";
-    send({ type: "hello", name: navigator.userAgent });
+    send({ type: "hello", name: navigator.userAgent, deviceId: deviceId() });
     // Report viewport orientation so the editor's "Follow device"
     // preview can mirror it. Re-sent on every resize/orientationchange.
     sendDeviceOrientation();
