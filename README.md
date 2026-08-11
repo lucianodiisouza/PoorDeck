@@ -54,12 +54,21 @@ Requires Xcode, [xcodegen](https://github.com/yonyz/XcodeGen) (`brew install
 xcodegen`), and Node.
 
 ```bash
-desktop/scripts/run.sh
+scripts/build-run.sh
 ```
 
-That builds the client, generates + builds the app, and launches it. Look for
-the grid icon in the menu bar; open **configuration** to see the QR code, then
-scan it from a device on the same network.
+That builds the client, generates + builds the app, kills any running copy, and
+launches the freshly built bundle (printing its version, build time, and git
+commit so you know it's the latest). Look for the grid icon in the menu bar;
+open **configuration** to see the QR code, then scan it from a device on the
+same network.
+
+To wipe every trace of the app from your Mac — built bundles, installed copies,
+saved layout, and preferences:
+
+```bash
+scripts/uninstall.sh
+```
 
 ### Client dev server (hot reload)
 
