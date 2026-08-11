@@ -11,6 +11,7 @@ struct LayoutEditorView: View {
     @EnvironmentObject private var server: Server
     @State private var selectedPageId: String?
     @State private var selectedButtonId: String?
+    @State private var hoveredPageId: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -115,30 +116,38 @@ struct LayoutEditorView: View {
 
     private func pageRow(for page: Page) -> some View {
         let isSelected = selectedPageId == page.id
+        let isHovered = hoveredPageId == page.id
         return Button {
             selectedPageId = page.id
         } label: {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: "square.grid.2x2")
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                     .frame(width: 16)
                 Text(page.name)
+                    .fontWeight(isSelected ? .semibold : .regular)
                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: 6)
                 Text("\(page.buttons.count)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.8) : Color.secondary.opacity(0.6))
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected
+                          ? Color.accentColor.opacity(0.18)
+                          : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
             )
             // Make the whole padded row a hit target, not just the text.
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredPageId = hovering ? page.id : (hoveredPageId == page.id ? nil : hoveredPageId)
+        }
         .contextMenu {
             if page.id != "p4" {
                 Button(role: .destructive) {
