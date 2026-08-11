@@ -7,43 +7,125 @@
   import AppVolumeSlider from "./lib/AppVolumeSlider.svelte";
 
   let pageIndex = $state(0);
-  let viewportW = $state(390);
-  let viewportH = $state(700);
+  // Device orientation, from matchMedia (re-fires on rotation on its
+  // own). Only used for the orientation-lock hint and to pick an
+  // explicit per-orientation column count if the editor set one.
+  let deviceLandscape = $state(false);
+  // The grid's real measured content box, from a ResizeObserver. This
+  // is what drives the auto-fit packing below — measuring the actual
+  // box means no magic numbers and it re-solves on rotation for free.
+  let gridEl = $state<HTMLElement | null>(null);
+  let gridW = $state(0);
+  let gridH = $state(0);
+  const GAP = 12;
+  const KEY_MAX = 220; // don't let keys get comical on iPad / desktop
+
+  // How keys use the space:
+  //  • "square" — keys stay square, sized to the biggest square that
+  //    fits; the block is centered (a thin margin on the non-binding
+  //    axis is unavoidable for squares).
+  //  • "fill"  — keys stretch to fill every cell edge-to-edge, so there
+  //    is zero empty space; keys become rectangular.
+  // Persisted per-device so the choice sticks across reloads / PWA.
+  type FitMode = "square" | "fill";
+  const loadFit = (): FitMode => {
+    try {
+      return localStorage.getItem("poordeck.fit") === "fill"
+        ? "fill"
+        : "square";
+    } catch {
+      return "square";
+    }
+  };
+  let fitMode = $state<FitMode>(loadFit());
+  function setFit(mode: FitMode) {
+    fitMode = mode;
+    try {
+      localStorage.setItem("poordeck.fit", mode);
+    } catch {
+      /* private mode / storage disabled — just don't persist */
+    }
+  }
+
   const pages = $derived(deck.layout?.pages ?? []);
   const theme = $derived(deck.layout?.theme ?? null);
   const currentPage = $derived(pages[pageIndex] ?? null);
   const isVolumePage = $derived(currentPage?.id === "p4" ?? false);
 
   // Resolve the orientation we'll render for. An orientation lock
-  // pinned to a page forces the layout (and the cell size cap) to
-  // match that orientation even if the device is currently held the
-  // other way. The page also exposes per-orientation column counts,
-  // so the editor can set "3 columns portrait, 6 columns landscape"
-  // and we pick the right one here.
+  // pinned to a page forces the layout to match that orientation even
+  // if the device is currently held the other way.
   const renderOrientation = $derived.by((): "portrait" | "landscape" => {
-    if (!currentPage) return viewportW > viewportH ? "landscape" : "portrait";
-    if (currentPage.orientationLock) return currentPage.orientationLock;
-    return viewportW > viewportH ? "landscape" : "portrait";
+    if (currentPage?.orientationLock) return currentPage.orientationLock;
+    return deviceLandscape ? "landscape" : "portrait";
   });
 
-  // When the editor's configured column count would be wrong for the
-  // current orientation (the page only set `columns`, not the
-  // portrait/landscape variants), phone landscape doubles it so the
-  // page fits without scrolling.
+  // Pick the column count that best uses the measured grid box, given
+  // the fit mode, and adapts to orientation for free. An explicit
+  // per-orientation column count from the editor still wins, if set.
+  //   • square — maximize the fitting square edge (biggest keys).
+  //   • fill   — minimize the cell's aspect distortion, so full-bleed
+  //     cells stay as close to square as the screen allows.
   const effectiveColumns = $derived.by(() => {
     if (!currentPage) return 3;
-    const perOrientation =
+    const explicit =
       renderOrientation === "portrait"
         ? currentPage.columnsPortrait
         : currentPage.columnsLandscape;
-    if (perOrientation != null) return perOrientation;
+    if (explicit != null) return explicit;
 
-    const isLandscape = renderOrientation === "landscape";
-    const isPhoneSize = Math.max(viewportW, viewportH) < 900;
-    if (isLandscape && isPhoneSize) {
-      return Math.max(currentPage.columns, currentPage.columns * 2);
+    const n = currentPage.buttons.length;
+    if (n <= 1) return 1;
+    // Before the first measurement, fall back to the page's hint.
+    if (gridW === 0 || gridH === 0) return currentPage.columns;
+
+    let bestCols = 1;
+    let bestScore = -Infinity;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const cellW = (gridW - (cols - 1) * GAP) / cols;
+      const cellH = (gridH - (rows - 1) * GAP) / rows;
+      if (cellW <= 0 || cellH <= 0) continue;
+      // Higher is better.
+      //   square — the fitting square edge (biggest keys).
+      //   fill   — closest to 1:1 cells, but penalize empty trailing
+      //     cells so we don't pick a shape that strands a near-empty
+      //     last row (which would just be dead space again).
+      let score: number;
+      if (fitMode === "fill") {
+        const aspect = Math.max(cellW, cellH) / Math.min(cellW, cellH);
+        const empties = cols * rows - n;
+        score = -(aspect + 0.6 * empties);
+      } else {
+        score = Math.min(cellW, cellH);
+      }
+      // Strictly-greater keeps the fewest columns among ties, which
+      // reads calmer (fuller rows over a tall stack of near-equal size).
+      if (score > bestScore + 1e-6) {
+        bestScore = score;
+        bestCols = cols;
+      }
     }
-    return currentPage.columns;
+    return bestCols;
+  });
+
+  // Row count for the chosen columns. Feeds the CSS grid template.
+  const rowCount = $derived.by(() => {
+    const buttons = currentPage?.buttons.length ?? 0;
+    return Math.max(1, Math.ceil(buttons / effectiveColumns));
+  });
+
+  // The square key edge, in px, for the chosen grid on the measured
+  // box. Capped so keys stay sane on large screens. Computed here (not
+  // in CSS) because we already have the exact numbers from the
+  // ResizeObserver — no container-query rounding to reason about.
+  const keyPx = $derived.by(() => {
+    const cols = effectiveColumns;
+    const rows = rowCount;
+    if (gridW === 0 || gridH === 0) return KEY_MAX;
+    const cellW = (gridW - (cols - 1) * GAP) / cols;
+    const cellH = (gridH - (rows - 1) * GAP) / rows;
+    return Math.max(40, Math.min(cellW, cellH, KEY_MAX));
   });
 
   // True when the device is being held the wrong way relative to the
@@ -54,45 +136,33 @@
   const orientationMismatch = $derived.by(() => {
     if (!currentPage?.orientationLock) return false;
     return currentPage.orientationLock === "portrait"
-      ? viewportW > viewportH
-      : viewportW < viewportH;
+      ? deviceLandscape
+      : !deviceLandscape;
   });
-
-  // Per-cell size cap, in CSS pixels: the smaller of (column width,
-  // available height / row count). Lets a 3-col 6-button page render
-  // as 3x2 on any phone, regardless of orientation, without scrolling.
-  // When the page pins a different orientation via orientationLock,
-  // the cap uses that orientation's dimensions so the layout is
-  // visually consistent (the user will see the same cell size once
-  // they rotate the device to match).
-  const cellMaxPx = $derived.by(() => {
-    const cols = effectiveColumns;
-    const buttons = currentPage?.buttons.length ?? 0;
-    const rows = Math.max(1, Math.ceil(buttons / cols));
-    // Swap width/height when the page is locked to the opposite
-    // orientation from the device's current one.
-    const locked = renderOrientation === "landscape";
-    const widthAxis = locked ? viewportH : viewportW;
-    const heightAxis = locked ? viewportW : viewportH;
-    const widthFit = (widthAxis - 28 - (cols - 1) * 12) / cols;
-    const heightAvailable = heightAxis - 40 - 16 - 30 - 40;
-    const heightFit = heightAvailable / rows;
-    return Math.max(40, Math.min(widthFit, heightFit));
-  });
-
-  function onResize() {
-    viewportW = window.innerWidth;
-    viewportH = window.innerHeight;
-  }
 
   onMount(() => {
-    onResize();
-    window.addEventListener("resize", onResize);
-    window.addEventListener("orientationchange", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
+    const landscapeMq = window.matchMedia("(orientation: landscape)");
+    const sync = () => {
+      deviceLandscape = landscapeMq.matches;
     };
+    sync();
+    landscapeMq.addEventListener("change", sync);
+    return () => landscapeMq.removeEventListener("change", sync);
+  });
+
+  // Measure the grid box and keep gridW/gridH in sync. A ResizeObserver
+  // catches rotation, the Safari toolbar collapsing, and font-size
+  // changes — everything that alters the available area — without any
+  // resize listeners or viewport math.
+  $effect(() => {
+    if (!gridEl) return;
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0].contentRect;
+      gridW = box.width;
+      gridH = box.height;
+    });
+    ro.observe(gridEl);
+    return () => ro.disconnect();
   });
 
   // Keep the theme reflected onto CSS variables.
@@ -175,6 +245,35 @@
   <header class="bar">
     <span class="dot" class:online={deck.status === "open"}></span>
     <span class="title">{currentPage?.name ?? "PoorDeck"}</span>
+    <div class="fit-toggle" role="group" aria-label="Button fit">
+      <button
+        type="button"
+        class:active={fitMode === "square"}
+        onclick={() => setFit("square")}
+        aria-label="Square keys"
+        aria-pressed={fitMode === "square"}
+        title="Square — biggest square keys, centered"
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2" />
+          <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2" />
+          <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2" />
+          <rect x="9" y="9" width="5.5" height="5.5" rx="1.2" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class:active={fitMode === "fill"}
+        onclick={() => setFit("fill")}
+        aria-label="Fill keys"
+        aria-pressed={fitMode === "fill"}
+        title="Fill — keys stretch to fill the screen"
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="1.8" />
+        </svg>
+      </button>
+    </div>
     <span class="status">
       {#if deck.status === "open"}connected
       {:else if deck.status === "connecting"}connecting…
@@ -243,7 +342,9 @@
     {:else}
       <section
         class="grid"
-        style="grid-template-columns: repeat({effectiveColumns}, 1fr); --wd-cell-max: {cellMaxPx}px;"
+        class:fill={fitMode === "fill"}
+        bind:this={gridEl}
+        style="--cols: {effectiveColumns}; --rows: {rowCount}; --key: {keyPx}px;"
       >
         {#each currentPage.buttons as button (button.id)}
           <button
@@ -310,16 +411,62 @@
     font-weight: 600;
   }
   .status {
-    margin-left: auto;
     color: color-mix(in srgb, var(--wd-text) 55%, transparent);
     font-size: 13px;
   }
 
+  /* Segmented square / fill toggle. Pushed to the right; status trails it. */
+  .fit-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--wd-text) 8%, transparent);
+  }
+  .fit-toggle button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: color-mix(in srgb, var(--wd-text) 55%, transparent);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .fit-toggle button svg {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+  }
+  .fit-toggle button.active {
+    background: var(--wd-accent);
+    color: #fff;
+  }
+
   .grid {
     flex: 1;
+    min-height: 0;
     display: grid;
     gap: 12px;
-    align-content: start;
+  }
+  /* Square mode: --cols / --rows / --key are set inline from the
+     auto-fit packing. Tracks are sized to the square key so keys stay
+     packed with a uniform gap; the block is centered in the leftover
+     space rather than spread out with holes between rows. */
+  .grid:not(.fill) {
+    grid-template-columns: repeat(var(--cols), var(--key, 180px));
+    grid-template-rows: repeat(var(--rows), var(--key, 180px));
+    place-content: center;
+  }
+  /* Fill mode: cells stretch to consume every pixel — zero margin,
+     rectangular keys. */
+  .grid.fill {
+    grid-template-columns: repeat(var(--cols), 1fr);
+    grid-template-rows: repeat(var(--rows), 1fr);
   }
 
   .key {
@@ -330,18 +477,18 @@
     gap: 8px;
     border: none;
     border-radius: var(--wd-radius);
-    width: 100%;
-    aspect-ratio: 1;
-    /* The grid's --wd-cell-max variable is set inline by App.svelte
-       to min(viewportWidth/cols, viewportHeight/rows) so the cell
-       can never grow large enough to push the row off-screen. */
-    max-width: var(--wd-cell-max, 200px);
-    max-height: var(--wd-cell-max, 200px);
+    /* Square mode: fixed square edge. Fill mode overrides to 100%. */
+    width: var(--key, 180px);
+    height: var(--key, 180px);
     background: var(--wd-surface);
     color: var(--wd-text);
     cursor: pointer;
     transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s;
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  }
+  .grid.fill .key {
+    width: 100%;
+    height: 100%;
   }
   .key:active {
     transform: scale(0.94);

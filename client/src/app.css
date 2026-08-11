@@ -28,7 +28,11 @@ body {
 }
 
 #app {
+  /* Dynamic viewport height: tracks Safari's collapsing toolbar so the
+     bottom row is never clipped. Falls back to 100% where dvh is
+     unsupported. */
   height: 100%;
+  height: 100dvh;
   /* Respect the iPhone notch / home indicator in fullscreen mode. */
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
     env(safe-area-inset-bottom) env(safe-area-inset-left);
