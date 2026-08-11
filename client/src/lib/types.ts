@@ -84,11 +84,13 @@ export interface AudioApp {
   muted: boolean;
 }
 
-/// A running application mirrored on the Dock page. `id` is the bundle id.
+/// An app mirrored on the Dock page. `id` is the bundle id. `running` is
+/// false for pinned Dock apps that aren't open; `active` marks the frontmost.
 export interface RunningApp {
   id: string;
   name: string;
   icon?: string | null;
+  running: boolean;
   active: boolean;
 }
 

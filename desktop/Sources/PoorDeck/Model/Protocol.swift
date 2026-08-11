@@ -168,12 +168,14 @@ struct AudioApp: Codable {
     var muted: Bool
 }
 
-/// A running application, mirrored to the client's Dock page. `id` is the
-/// bundle id (used to activate it); `active` marks the frontmost app.
+/// An app mirrored to the client's Dock page. `id` is the bundle id (used to
+/// activate or launch it). `running` is false for pinned Dock apps that aren't
+/// currently open; `active` marks the frontmost running app.
 struct RunningApp: Codable {
     var id: String
     var name: String
     var icon: String?
+    var running: Bool
     var active: Bool
 }
 

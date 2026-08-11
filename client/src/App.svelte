@@ -331,6 +331,7 @@
 <main
   class="deck"
   class:standalone
+  class:has-cta={showInstall}
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
 >
@@ -413,6 +414,7 @@
             <button
               class="key"
               class:acked={app.active}
+              class:idle={!app.running}
               onclick={() => {
                 activateApp(app.id);
                 if (navigator.vibrate) navigator.vibrate(8);
@@ -424,6 +426,7 @@
                 <span class="glyph">{app.name.slice(0, 1)}</span>
               {/if}
               <span class="label">{app.name}</span>
+              {#if app.running}<span class="run-dot" aria-hidden="true"></span>{/if}
             </button>
           {/each}
         </section>
@@ -544,6 +547,11 @@
     padding: 8px 10px;
     gap: 8px;
   }
+  /* Reserve room for the floating install CTA so it never covers the last
+     row of a full grid (it's position:fixed, i.e. out of flow). */
+  .deck.has-cta {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
 
   .bar {
     display: flex;
@@ -631,6 +639,7 @@
     gap: 6%;
     border: none;
     border-radius: var(--wd-radius);
+    position: relative;
     /* Square mode: fixed square edge. Fill mode overrides to 100%. */
     width: var(--key, 180px);
     height: var(--key, 180px);
@@ -654,6 +663,21 @@
   }
   .key.acked {
     box-shadow: 0 0 0 2px var(--wd-accent);
+  }
+  /* Dock: pinned-but-not-running apps read as dimmed; running apps get a
+     small accent dot (the macOS "app is open" indicator). */
+  .key.idle {
+    opacity: 0.5;
+  }
+  .run-dot {
+    position: absolute;
+    top: 8%;
+    right: 8%;
+    width: max(5px, 6cqmin);
+    height: max(5px, 6cqmin);
+    border-radius: 50%;
+    background: var(--wd-accent);
+    box-shadow: 0 0 0 2px var(--wd-surface);
   }
 
   /* Sizes are in cqmin (% of the button's shorter edge) so art + text

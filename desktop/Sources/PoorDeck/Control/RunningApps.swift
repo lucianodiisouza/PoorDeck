@@ -20,6 +20,7 @@ final class RunningAppsController: ObservableObject {
 
     private var started = false
     private var observers: [NSObjectProtocol] = []
+    private var distributedObservers: [NSObjectProtocol] = []
     /// data-URL icon cache, keyed by bundle id — decoding an app icon to PNG
     /// isn't free and the set barely changes, so we memoize.
     private var iconCache: [String: String] = [:]
@@ -46,31 +47,67 @@ final class RunningAppsController: ObservableObject {
             }
             observers.append(token)
         }
+
+        // The Dock posts this (distributed) when its pinned set changes —
+        // add / remove / reorder. Refresh so pinned tiles stay in sync.
+        let dockToken = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.dock.prefchanged"),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onChange?() }
+        }
+        distributedObservers.append(dockToken)
     }
 
     func stop() {
         let nc = NSWorkspace.shared.notificationCenter
         observers.forEach { nc.removeObserver($0) }
         observers.removeAll()
+        distributedObservers.forEach {
+            DistributedNotificationCenter.default().removeObserver($0)
+        }
+        distributedObservers.removeAll()
         started = false
     }
 
-    /// The current running apps, frontmost first-flagged. Filtered to
-    /// `.regular` apps (the ones with a Dock tile / UI) and de-duplicated by
-    /// bundle id. Ordered by launch time so the list stays stable as apps
-    /// come and go, the way the Dock keeps a running app in place.
+    /// The Dock, mirrored: the user's pinned apps first (in Dock order),
+    /// then any other running app not already pinned. Pinned apps that
+    /// aren't open carry `running: false` so the client can dim them; the
+    /// frontmost running app is flagged `active`. Tapping a dimmed pinned
+    /// app launches it (openApp both launches and activates).
     func snapshot() -> [RunningApp] {
         let frontId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
-        var seen = Set<String>()
-        let apps = NSWorkspace.shared.runningApplications
+        // bundle id -> running app, for O(1) "is it open / frontmost" lookups.
+        let running = NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }
-            .sorted {
-                ($0.launchDate ?? .distantPast) < ($1.launchDate ?? .distantPast)
-            }
+        var runningById: [String: NSRunningApplication] = [:]
+        for app in running {
+            if let b = app.bundleIdentifier, runningById[b] == nil { runningById[b] = app }
+        }
 
+        var seen = Set<String>()
         var result: [RunningApp] = []
-        for app in apps {
+
+        // 1) Pinned Dock apps, in Dock order.
+        for pinned in pinnedApps() where seen.insert(pinned.id).inserted {
+            result.append(
+                RunningApp(
+                    id: pinned.id,
+                    name: pinned.name,
+                    icon: AppLauncher.iconDataURL(bundleId: pinned.id)
+                        ?? runningById[pinned.id]?.icon.flatMap { Self.encode($0) },
+                    running: runningById[pinned.id] != nil,
+                    active: pinned.id == frontId
+                )
+            )
+        }
+
+        // 2) Anything else currently running, ordered by launch time.
+        let others = running.sorted {
+            ($0.launchDate ?? .distantPast) < ($1.launchDate ?? .distantPast)
+        }
+        for app in others {
             guard let bundleId = app.bundleIdentifier, seen.insert(bundleId).inserted
             else { continue }
             let name = app.localizedName ?? AppLauncher.displayName(bundleId: bundleId) ?? bundleId
@@ -79,11 +116,42 @@ final class RunningAppsController: ObservableObject {
                     id: bundleId,
                     name: name,
                     icon: icon(for: app, bundleId: bundleId),
+                    running: true,
                     active: bundleId == frontId
                 )
             )
         }
         return result
+    }
+
+    /// The Dock's pinned applications, in order, read from the current user's
+    /// `com.apple.dock` preferences (`persistent-apps`). Each tile carries a
+    /// file URL (and, on newer macOS, the bundle id directly); we resolve a
+    /// bundle id and a display label from it. Folders / stacks live under
+    /// `persistent-others` and are intentionally skipped.
+    private func pinnedApps() -> [(id: String, name: String)] {
+        // Read fresh — the Dock rewrites this on every pin/reorder.
+        CFPreferencesAppSynchronize("com.apple.dock" as CFString)
+        guard let raw = CFPreferencesCopyAppValue(
+            "persistent-apps" as CFString, "com.apple.dock" as CFString
+        ) as? [[String: Any]] else { return [] }
+
+        var out: [(id: String, name: String)] = []
+        for entry in raw {
+            guard let tile = entry["tile-data"] as? [String: Any] else { continue }
+            var bundleId = tile["bundle-identifier"] as? String
+            let label = tile["file-label"] as? String
+            if bundleId == nil,
+               let fileData = tile["file-data"] as? [String: Any],
+               let urlString = fileData["_CFURLString"] as? String,
+               let url = URL(string: urlString) {
+                bundleId = Bundle(url: url)?.bundleIdentifier
+            }
+            guard let id = bundleId else { continue }
+            let name = label ?? AppLauncher.displayName(bundleId: id) ?? id
+            out.append((id: id, name: name))
+        }
+        return out
     }
 
     /// Encode a running app's icon to a PNG data URL, cached by bundle id.
