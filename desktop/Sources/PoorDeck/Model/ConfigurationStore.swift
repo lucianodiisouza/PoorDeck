@@ -226,6 +226,12 @@ final class ConfigurationStore: ObservableObject {
                        action: Action(kind: .volume, bundleId: nil,
                                       shortcut: nil, target: .system))
         }
+        func media(_ id: String, _ label: String, _ symbol: String,
+                   _ key: MediaKey) -> DeckButton {
+            DeckButton(id: id, label: label, icon: nil, symbol: symbol,
+                       action: Action(kind: .media, bundleId: nil, shortcut: nil,
+                                      target: nil, mediaKey: key))
+        }
 
         let page1 = Page(id: "p1", name: "Apps", columns: 3, buttons: [
             btn("Safari", "com.apple.Safari", "safari"),
@@ -248,10 +254,18 @@ final class ConfigurationStore: ObservableObject {
             key("screenshot", "Screenshot", "4", [.command, .shift]),
             key("spotlight", "Spotlight", "space", [.command]),
         ])
-        let page4 = Page(id: "p4", name: "Volume", columns: 2, buttons: [
+        let page4 = Page(id: "p4", name: "Media", columns: 3, buttons: [
+            media("media-prev", "Previous", "backward.end.fill", .previous),
+            media("media-playpause", "Play / Pause", "playpause.fill", .playPause),
+            media("media-next", "Next", "forward.end.fill", .next),
+            media("media-voldown", "Vol Down", "speaker.wave.1.fill", .volumeDown),
+            media("media-mute", "Mute", "speaker.slash.fill", .mute),
+            media("media-volup", "Vol Up", "speaker.wave.3.fill", .volumeUp),
+        ])
+        let page5 = Page(id: "p5", name: "Volume", columns: 2, buttons: [
             volume("vol-master", "System", "speaker.wave.2.fill"),
             volume("vol-mute", "Mute", "speaker.slash.fill"),
         ])
-        return Layout(pages: [page1, page2, page3, page4], theme: .dark)
+        return Layout(pages: [page1, page2, page3, page4, page5], theme: .dark)
     }
 }

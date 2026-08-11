@@ -512,6 +512,7 @@ private struct ButtonForm: View {
                                 Text("None").tag(Action.Kind.none)
                                 Text("Open app").tag(Action.Kind.openApp)
                                 Text("Keyboard shortcut").tag(Action.Kind.keyShortcut)
+                                Text("Media control").tag(Action.Kind.media)
                                 Text("Volume").tag(Action.Kind.volume)
                             }
                             .labelsHidden()
@@ -526,6 +527,8 @@ private struct ButtonForm: View {
                             }
                         case .keyShortcut:
                             ShortcutEditor(button: button, onChange: onChange)
+                        case .media:
+                            MediaControlEditor(button: button, onChange: onChange)
                         case .volume:
                             actionHint("Controls the system master volume. The per-app volume list is live; this control stays a simple slider/mute pair.")
                         }
@@ -594,6 +597,7 @@ private struct ButtonForm: View {
         case .none: return "No action"
         case .openApp: return "Opens an app"
         case .keyShortcut: return "Keyboard shortcut"
+        case .media: return button.action.mediaKey.map(MediaKeyInfo.label) ?? "Media control"
         case .volume: return "System volume"
         }
     }
@@ -703,6 +707,100 @@ private struct ShortcutEditor: View {
                 ))
             }
         }
+    }
+}
+
+/// Display metadata for the standard media keys — the human label and the
+/// SF Symbol that stands in for it on the deck. Kept out of `Protocol.swift`
+/// so the wire model stays presentation-free.
+enum MediaKeyInfo {
+    /// The order the picker offers them in — transport keys first, then
+    /// the volume trio.
+    static let ordered: [MediaKey] = [
+        .playPause, .next, .previous, .fastForward, .rewind,
+        .mute, .volumeUp, .volumeDown,
+    ]
+
+    static func label(_ key: MediaKey) -> String {
+        switch key {
+        case .playPause: return "Play / Pause"
+        case .next: return "Next Track"
+        case .previous: return "Previous Track"
+        case .fastForward: return "Fast Forward"
+        case .rewind: return "Rewind"
+        case .mute: return "Mute"
+        case .volumeUp: return "Volume Up"
+        case .volumeDown: return "Volume Down"
+        }
+    }
+
+    static func symbol(_ key: MediaKey) -> String {
+        switch key {
+        case .playPause: return "playpause.fill"
+        case .next: return "forward.end.fill"
+        case .previous: return "backward.end.fill"
+        case .fastForward: return "forward.fill"
+        case .rewind: return "backward.fill"
+        case .mute: return "speaker.slash.fill"
+        case .volumeUp: return "speaker.wave.3.fill"
+        case .volumeDown: return "speaker.wave.1.fill"
+        }
+    }
+
+    /// True when `label` is still one of the auto-filled media labels — i.e.
+    /// the user hasn't typed their own. Lets us refresh the label when they
+    /// switch keys without clobbering a custom one.
+    static func isDefaultLabel(_ label: String) -> Bool {
+        ordered.map(Self.label).contains(label)
+    }
+}
+
+/// Picks which standard media / transport key a button posts. Choosing one
+/// also fills the button's fallback symbol (and its label, while it's still a
+/// default) so the tile looks the part without extra fiddling.
+private struct MediaControlEditor: View {
+    let button: DeckButton
+    let onChange: (DeckButton) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LabeledField(label: "Control") {
+                Picker("", selection: Binding(
+                    get: { button.action.mediaKey ?? .playPause },
+                    set: { apply($0) }
+                )) {
+                    ForEach(MediaKeyInfo.ordered, id: \.self) { key in
+                        Text(MediaKeyInfo.label(key)).tag(key)
+                    }
+                }
+                .labelsHidden()
+            }
+            actionHint("Posts the system media key, so it controls whatever app is currently playing — Music, Spotify, a browser tab — just like the keys on the keyboard.")
+        }
+        .onAppear {
+            // A button freshly switched to "Media control" has no key yet;
+            // seed it so the tile and picker aren't blank.
+            if button.action.mediaKey == nil { apply(.playPause) }
+        }
+    }
+
+    private func apply(_ key: MediaKey) {
+        var updated = button
+        updated.action.mediaKey = key
+        // The symbol is only a fallback, so it's always safe to refresh.
+        updated.symbol = MediaKeyInfo.symbol(key)
+        // Only overwrite the label when the user hasn't customized it.
+        if updated.label.isEmpty || MediaKeyInfo.isDefaultLabel(updated.label) {
+            updated.label = MediaKeyInfo.label(key)
+        }
+        onChange(updated)
+    }
+
+    private func actionHint(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

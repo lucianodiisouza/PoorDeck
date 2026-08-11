@@ -67,12 +67,13 @@ struct Action: Codable, Equatable {
         case openApp      // launch or bring an app to the front
         case keyShortcut  // post a keyboard shortcut (e.g. ⌘↵)
         case volume       // a non-tap control bound to system volume
+        case media        // a standard media/transport key (play/pause, next…)
         case none         // placeholder / not wired yet
     }
     var kind: Kind
     /// Bundle id. For `openApp` it's the target; for `keyShortcut` it's an
     /// optional app to bring to the front before the keys are sent (nil = send
-    /// to whatever's already focused). Reserved / unused for `volume`.
+    /// to whatever's already focused). Reserved / unused for `volume` / `media`.
     var bundleId: String?
     /// The keystroke for `keyShortcut`.
     var shortcut: Shortcut?
@@ -81,6 +82,40 @@ struct Action: Codable, Equatable {
     /// the process-tap engine mentioned in the README and is intentionally not
     /// modeled yet — `target` is forward-compatible.
     var target: VolumeTarget?
+    /// For `media` controls: which standard transport key this button posts.
+    /// These are the system-wide media keys (the ones on the F-row / Touch Bar),
+    /// so they drive whatever app currently owns "Now Playing" — Music,
+    /// Spotify, a browser tab, etc.
+    var mediaKey: MediaKey? = nil
+}
+
+/// A standard system media / transport key. Posted as an NSSystem-defined
+/// event by `MediaKeyEmitter`, so it reaches the current Now Playing app the
+/// same way the hardware keys do. Raw values are the IOKit `NX_KEYTYPE_*`
+/// codes the emitter feeds to the HID event.
+enum MediaKey: String, Codable {
+    case playPause    // NX_KEYTYPE_PLAY (16)
+    case next         // NX_KEYTYPE_NEXT (17)
+    case previous     // NX_KEYTYPE_PREVIOUS (18)
+    case fastForward  // NX_KEYTYPE_FAST (19)
+    case rewind       // NX_KEYTYPE_REWIND (20)
+    case mute         // NX_KEYTYPE_MUTE (7)
+    case volumeUp     // NX_KEYTYPE_SOUND_UP (0)
+    case volumeDown   // NX_KEYTYPE_SOUND_DOWN (1)
+
+    /// The IOKit `NX_KEYTYPE_*` code fed to the system-defined HID event.
+    var nxKeyCode: Int32 {
+        switch self {
+        case .volumeUp: return 0
+        case .volumeDown: return 1
+        case .mute: return 7
+        case .playPause: return 16
+        case .next: return 17
+        case .previous: return 18
+        case .fastForward: return 19
+        case .rewind: return 20
+        }
+    }
 }
 
 enum VolumeTarget: String, Codable {

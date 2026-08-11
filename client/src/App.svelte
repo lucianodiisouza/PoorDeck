@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { connect, deck, press, toggleMuteSystem } from "./lib/deck.svelte";
   import { formatShortcut } from "./lib/shortcut";
+  import { symbolGlyph } from "./lib/symbols";
   import VolumeSlider from "./lib/VolumeSlider.svelte";
   import AppVolumeSlider from "./lib/AppVolumeSlider.svelte";
 
@@ -254,6 +255,8 @@
               <img class="icon" src={button.icon} alt={button.label} draggable="false" />
             {:else if button.action.kind === "keyShortcut" && button.action.shortcut}
               <span class="combo">{formatShortcut(button.action.shortcut)}</span>
+            {:else if symbolGlyph(button.symbol)}
+              <span class="glyph symbol-glyph">{symbolGlyph(button.symbol)}</span>
             {:else}
               <span class="glyph">{button.label.slice(0, 1)}</span>
             {/if}
@@ -364,6 +367,13 @@
     border-radius: 12px;
     background: var(--wd-accent);
     color: #fff;
+  }
+  /* Media / transport glyphs read better large and on a neutral tile than the
+     accent-filled single-letter fallback. */
+  .symbol-glyph {
+    font-size: 30px;
+    background: color-mix(in srgb, var(--wd-text) 12%, transparent);
+    color: var(--wd-text);
   }
   .combo {
     display: grid;

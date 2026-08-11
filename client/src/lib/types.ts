@@ -42,12 +42,27 @@ export interface Shortcut {
 
 export type VolumeTarget = "system";
 
+/** Standard system media / transport keys — the ones on the F-row / Touch Bar.
+ *  They drive whatever app currently owns "Now Playing" (Music, Spotify, a
+ *  browser tab…), so a single button works across every media app. */
+export type MediaKey =
+  | "playPause"
+  | "next"
+  | "previous"
+  | "fastForward"
+  | "rewind"
+  | "mute"
+  | "volumeUp"
+  | "volumeDown";
+
 export interface Action {
-  kind: "openApp" | "keyShortcut" | "volume" | "none";
+  kind: "openApp" | "keyShortcut" | "volume" | "media" | "none";
   bundleId?: string | null;
   shortcut?: Shortcut | null;
   /** For `volume` controls: which audio target this control drives. */
   target?: VolumeTarget | null;
+  /** For `media` controls: which standard transport key this button posts. */
+  mediaKey?: MediaKey | null;
 }
 
 export interface Theme {

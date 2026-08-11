@@ -316,6 +316,10 @@ final class Server: ObservableObject, @unchecked Sendable {
                     if let shortcut = button?.action.shortcut {
                         ok = KeyEmitter.send(shortcut, activating: button?.action.bundleId)
                     }
+                case .media:
+                    if let mediaKey = button?.action.mediaKey {
+                        ok = MediaKeyEmitter.send(mediaKey)
+                    }
                 default:
                     break
                 }
