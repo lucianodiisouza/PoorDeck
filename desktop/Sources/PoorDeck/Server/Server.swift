@@ -36,6 +36,9 @@ final class Server: ObservableObject, @unchecked Sendable {
     /// Per-app audio controller — enumerates processes, runs the tap pipeline,
     /// and publishes the list of apps currently producing audio.
     private let audio = AudioProcessController.shared
+    /// Running-apps controller — mirrors the Dock's open apps to the client's
+    /// Dock page and lets a tap bring one to the front.
+    private let dock = RunningAppsController.shared
 
     // MARK: Lifecycle
 
@@ -45,7 +48,22 @@ final class Server: ObservableObject, @unchecked Sendable {
         tryListen(portIndex: 0)
         startVolumeBridge()
         startAudioBridge()
+        startDockBridge()
         startLayoutBridge()
+    }
+
+    private func startDockBridge() {
+        // Fan out the running-apps snapshot whenever it changes (launch,
+        // quit, or a new frontmost app). Mirrors the audio bridge.
+        Task { @MainActor in
+            self.dock.onChange = { [weak self] in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.broadcast(.dock(list: self.dock.snapshot()))
+                }
+            }
+            self.dock.start()
+        }
     }
 
     /// Re-broadcast the layout to every connected client when the
@@ -253,6 +271,10 @@ final class Server: ObservableObject, @unchecked Sendable {
                 self.sendServerMessage(.apps(list: snapshot), to: conn)
             }
         }
+        // Push the running-apps snapshot so the Dock page paints immediately.
+        Task { @MainActor in
+            self.sendServerMessage(.dock(list: self.dock.snapshot()), to: conn)
+        }
     }
 
     private func unregisterClient(_ conn: NWConnection) {
@@ -355,6 +377,13 @@ final class Server: ObservableObject, @unchecked Sendable {
             // editor's "Follow device" canvas mode reads this to
             // re-render the preview the same way the phone is held.
             self.lastDeviceOrientationIsPortrait = isPortrait
+        case .activateApp(let bundleId):
+            // Bring the app to the front (openApp activates an already-running
+            // app). The frontmost change fires the dock bridge, which
+            // broadcasts a fresh snapshot so every client re-highlights.
+            Task { @MainActor in
+                _ = AppLauncher.openApp(bundleId: bundleId)
+            }
         }
     }
 

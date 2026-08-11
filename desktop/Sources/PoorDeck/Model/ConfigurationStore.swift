@@ -64,7 +64,16 @@ final class ConfigurationStore: ObservableObject {
                                    encoder: JSONEncoder,
                                    decoder: JSONDecoder) -> Layout {
         if let data = try? Data(contentsOf: url),
-           let layout = try? decoder.decode(Layout.self, from: data) {
+           var layout = try? decoder.decode(Layout.self, from: data) {
+            // Migration: ensure the live Dock page exists on layouts saved
+            // before it was introduced, without disturbing the user's other
+            // pages. Append it once, then persist so this is a no-op next run.
+            if !layout.pages.contains(where: { $0.id == "dock" }) {
+                layout.pages.append(Page(id: "dock", name: "Dock", columns: 4, buttons: []))
+                if let migrated = try? encoder.encode(layout) {
+                    try? migrated.write(to: url, options: .atomic)
+                }
+            }
             return layout
         }
         let seed = makeSeed()
@@ -266,6 +275,9 @@ final class ConfigurationStore: ObservableObject {
             volume("vol-master", "System", "speaker.wave.2.fill"),
             volume("vol-mute", "Mute", "speaker.slash.fill"),
         ])
-        return Layout(pages: [page1, page2, page3, page4, page5], theme: .dark)
+        // The Dock page has no static buttons — the client detects its stable
+        // id ("dock") and renders the live running-apps list the server pushes.
+        let dock = Page(id: "dock", name: "Dock", columns: 4, buttons: [])
+        return Layout(pages: [page1, page2, page3, page4, page5, dock], theme: .dark)
     }
 }

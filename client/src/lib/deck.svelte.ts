@@ -2,6 +2,7 @@ import type {
   AudioApp,
   ClientMessage,
   Layout,
+  RunningApp,
   ServerMessage,
   VolumeTarget,
 } from "./types";
@@ -42,12 +43,16 @@ export const deck = $state<{
   /// List of audio apps the server currently sees. Replaced wholesale on
   /// every `apps` message; a per-app `appVolume` updates the matching row.
   apps: AudioApp[];
+  /// Running apps for the Dock page. Replaced wholesale on every `dock`
+  /// message (launch / quit / frontmost change).
+  dock: RunningApp[];
 }>({
   status: "connecting",
   layout: null,
   lastAck: null,
   systemVolume: null,
   apps: [],
+  dock: [],
 });
 
 let socket: WebSocket | null = null;
@@ -89,6 +94,8 @@ export function connect(): void {
       }
     } else if (msg.type === "apps") {
       deck.apps = msg.list;
+    } else if (msg.type === "dock") {
+      deck.dock = msg.list;
     } else if (msg.type === "appVolume") {
       if (isAppEcho(msg.id, msg.volume, msg.muted)) return;
       const idx = deck.apps.findIndex((a) => a.id === msg.id);
@@ -160,6 +167,11 @@ if (typeof window !== "undefined") {
 
 export function press(buttonId: string): void {
   send({ type: "press", buttonId });
+}
+
+/// Bring a running app to the front (or launch it) from the Dock page.
+export function activateApp(bundleId: string): void {
+  send({ type: "activateApp", bundleId });
 }
 
 /// Push a new target value to the server. Records the value so the round-trip

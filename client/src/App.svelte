@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { connect, deck, press, toggleMuteSystem } from "./lib/deck.svelte";
+  import {
+    activateApp,
+    connect,
+    deck,
+    press,
+    toggleMuteSystem,
+  } from "./lib/deck.svelte";
   import { formatShortcut } from "./lib/shortcut";
   import { symbolGlyph } from "./lib/symbols";
   import VolumeSlider from "./lib/VolumeSlider.svelte";
@@ -97,6 +103,14 @@
   const isVolumePage = $derived(
     currentPage?.buttons.some((b) => b.action.kind === "volume") ?? false,
   );
+  // The Dock page (stable id "dock") renders the live running-apps list the
+  // server pushes, not static buttons.
+  const isDockPage = $derived(currentPage?.id === "dock");
+  // How many tiles the grid lays out — dock apps on the Dock page,
+  // otherwise the page's buttons. Feeds the auto-fit packing below.
+  const itemCount = $derived(
+    isDockPage ? deck.dock.length : (currentPage?.buttons.length ?? 0),
+  );
 
   // Resolve the orientation we'll render for. An orientation lock
   // pinned to a page forces the layout to match that orientation even
@@ -120,7 +134,7 @@
         : currentPage.columnsLandscape;
     if (explicit != null) return explicit;
 
-    const n = currentPage.buttons.length;
+    const n = itemCount;
     if (n <= 1) return 1;
     // Before the first measurement, fall back to the page's hint.
     if (gridW === 0 || gridH === 0) return currentPage.columns;
@@ -156,10 +170,9 @@
   });
 
   // Row count for the chosen columns. Feeds the CSS grid template.
-  const rowCount = $derived.by(() => {
-    const buttons = currentPage?.buttons.length ?? 0;
-    return Math.max(1, Math.ceil(buttons / effectiveColumns));
-  });
+  const rowCount = $derived.by(() =>
+    Math.max(1, Math.ceil(itemCount / effectiveColumns)),
+  );
 
   // The square key edge, in px, for the chosen grid on the measured
   // box. Capped so keys stay sane on large screens. Computed here (not
@@ -382,7 +395,40 @@
         </div>
       </div>
     {/if}
-    {#if isVolumePage}
+    {#if isDockPage}
+      <!-- Dock page: a live grid of the Mac's running apps. Tapping one
+           brings it to the front. The frontmost app gets the accent ring.
+           The list is server-pushed (`deck.dock`) and updates as apps
+           launch, quit, or change focus. -->
+      {#if deck.dock.length === 0}
+        <div class="empty">No apps running.</div>
+      {:else}
+        <section
+          class="grid"
+          class:fill={fitMode === "fill"}
+          bind:this={gridEl}
+          style="--cols: {effectiveColumns}; --rows: {rowCount}; --key: {keyPx}px;"
+        >
+          {#each deck.dock as app (app.id)}
+            <button
+              class="key"
+              class:acked={app.active}
+              onclick={() => {
+                activateApp(app.id);
+                if (navigator.vibrate) navigator.vibrate(8);
+              }}
+            >
+              {#if app.icon}
+                <img class="icon" src={app.icon} alt={app.name} draggable="false" />
+              {:else}
+                <span class="glyph">{app.name.slice(0, 1)}</span>
+              {/if}
+              <span class="label">{app.name}</span>
+            </button>
+          {/each}
+        </section>
+      {/if}
+    {:else if isVolumePage}
       <!-- Custom render for the Volume page: master on top, then a
            live-updating list of apps. The list is dynamic (apps appear when
            they start playing, disappear when they stop) and lives entirely

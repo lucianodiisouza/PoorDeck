@@ -168,12 +168,24 @@ struct AudioApp: Codable {
     var muted: Bool
 }
 
+/// A running application, mirrored to the client's Dock page. `id` is the
+/// bundle id (used to activate it); `active` marks the frontmost app.
+struct RunningApp: Codable {
+    var id: String
+    var name: String
+    var icon: String?
+    var active: Bool
+}
+
 // MARK: Messages
 
 /// server -> client
 enum ServerMessage: Codable {
     case layout(Layout)
     case ack(buttonId: String, ok: Bool)
+    /// Snapshot of the currently running apps, for the Dock page. Refreshed
+    /// as apps launch / quit / come to the front. Replaces the client list.
+    case dock(list: [RunningApp])
     /// Current system volume (0…1). Pushed on connect and whenever the value
     /// changes from any source (slider on the client, macOS menu bar, keys).
     case volume(target: VolumeTarget, value: Float)
@@ -206,6 +218,9 @@ enum ServerMessage: Codable {
         case .apps(let list):
             try c.encode("apps", forKey: .type)
             try c.encode(list, forKey: .list)
+        case .dock(let list):
+            try c.encode("dock", forKey: .type)
+            try c.encode(list, forKey: .list)
         case .appVolume(let id, let volume, let muted):
             try c.encode("appVolume", forKey: .type)
             try c.encode(id, forKey: .id)
@@ -223,6 +238,7 @@ enum ServerMessage: Codable {
         case "volume": self = .volume(target: try c.decode(VolumeTarget.self, forKey: .target),
                                       value: try c.decode(Float.self, forKey: .value))
         case "apps": self = .apps(list: try c.decode([AudioApp].self, forKey: .list))
+        case "dock": self = .dock(list: try c.decode([RunningApp].self, forKey: .list))
         case "appVolume":
             self = .appVolume(id: try c.decode(String.self, forKey: .id),
                               volume: try c.decode(Float.self, forKey: .volume),
@@ -251,9 +267,11 @@ enum ClientMessage: Decodable {
     /// editor's "Follow device" preview toggle to render the device
     /// the same way the user is actually holding it.
     case deviceOrientation(isPortrait: Bool)
+    /// Activate (or launch) a running app from the Dock page, by bundle id.
+    case activateApp(bundleId: String)
 
     private enum CodingKeys: String, CodingKey {
-        case type, name, buttonId, target, value, id, muted, isPortrait
+        case type, name, buttonId, target, value, id, muted, isPortrait, bundleId
     }
 
     init(from decoder: Decoder) throws {
@@ -272,6 +290,8 @@ enum ClientMessage: Decodable {
             self = .deviceOrientation(
                 isPortrait: try c.decode(Bool.self, forKey: .isPortrait)
             )
+        case "activateApp":
+            self = .activateApp(bundleId: try c.decode(String.self, forKey: .bundleId))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown client message")
         }

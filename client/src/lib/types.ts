@@ -84,12 +84,21 @@ export interface AudioApp {
   muted: boolean;
 }
 
+/// A running application mirrored on the Dock page. `id` is the bundle id.
+export interface RunningApp {
+  id: string;
+  name: string;
+  icon?: string | null;
+  active: boolean;
+}
+
 // server -> client
 export type ServerMessage =
   | { type: "layout"; data: Layout }
   | { type: "ack"; buttonId: string; ok: boolean }
   | { type: "volume"; target: VolumeTarget; value: number }
   | { type: "apps"; list: AudioApp[] }
+  | { type: "dock"; list: RunningApp[] }
   | { type: "appVolume"; id: string; volume: number; muted: boolean };
 
 // client -> server
@@ -97,4 +106,5 @@ export type ClientMessage =
   | { type: "hello"; name?: string }
   | { type: "press"; buttonId: string }
   | { type: "volume"; target: VolumeTarget; value: number }
-  | { type: "setAppVolume"; id: string; value: number; muted: boolean };
+  | { type: "setAppVolume"; id: string; value: number; muted: boolean }
+  | { type: "activateApp"; bundleId: string };
