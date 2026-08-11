@@ -27,6 +27,24 @@ final class Server: ObservableObject, @unchecked Sendable {
     private let queue = DispatchQueue(label: "dev.oprimo.poordeck.server")
     private var listener: NWListener?
     private var clients: [ObjectIdentifier: NWConnection] = [:]
+    /// Last time we heard *anything* (a data frame or a pong) from each
+    /// connection. Used by the heartbeat to reap sockets that died
+    /// ungracefully — a locked phone, a page reload, or a Wi-Fi blip leaves a
+    /// half-open TCP connection that never delivers a FIN, so without this it
+    /// would linger in `clients` and inflate `clientCount` (a "phantom
+    /// device"). All access is on `queue`, same as `clients`.
+    private var lastSeen: [ObjectIdentifier: Date] = [:]
+    /// The device id each connection reported in its `hello`. Lets us collapse
+    /// several sockets from one physical device (page + service worker, a
+    /// reconnect race, a reopened tab) into a single counted device. Access on
+    /// `queue`.
+    private var deviceIds: [ObjectIdentifier: String] = [:]
+    private var heartbeatTimer: DispatchSourceTimer?
+
+    /// How often we ping every client, and how long a connection may stay
+    /// silent (no pong, no frame) before we consider it dead and reap it.
+    private let heartbeatInterval: TimeInterval = 10
+    private let heartbeatTimeout: TimeInterval = 30
 
     private let candidatePorts: [UInt16] = [8756, 8757, 8758, 8759, 8760]
 
@@ -50,6 +68,35 @@ final class Server: ObservableObject, @unchecked Sendable {
         startAudioBridge()
         startDockBridge()
         startLayoutBridge()
+        startHeartbeat()
+    }
+
+    /// Periodically ping every client and reap the ones that have gone silent.
+    /// Browsers answer a protocol-level ping with an automatic pong, which
+    /// lands in `handleFrame` and refreshes `lastSeen`; a dead socket never
+    /// pongs, so it ages past `heartbeatTimeout` and gets cancelled. This is
+    /// what keeps `clientCount` honest.
+    private func startHeartbeat() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + heartbeatInterval, repeating: heartbeatInterval)
+        timer.setEventHandler { [weak self] in self?.heartbeatTick() }
+        timer.resume()
+        heartbeatTimer = timer
+    }
+
+    private func heartbeatTick() {
+        // Runs on `queue`, so `clients` / `lastSeen` are safe to touch.
+        let now = Date()
+        let ping = WebSocket.encode(Data(), opcode: .ping)
+        for (id, conn) in clients {
+            let seen = lastSeen[id] ?? now
+            if now.timeIntervalSince(seen) > heartbeatTimeout {
+                // Silent too long — treat as dead and drop it.
+                unregisterClient(conn)
+            } else {
+                conn.send(content: ping, completion: .idempotent)
+            }
+        }
     }
 
     private func startDockBridge() {
@@ -253,10 +300,28 @@ final class Server: ObservableObject, @unchecked Sendable {
         })
     }
 
-    private func registerClient(_ conn: NWConnection) {
-        clients[ObjectIdentifier(conn)] = conn
-        let count = clients.count
+    /// Distinct physical devices currently connected: connections that have
+    /// reported a `deviceId` are grouped by it; connections still waiting to
+    /// say `hello` count as one each (so a fresh phone shows up immediately).
+    private func recomputeClientCount() {
+        var devices = Set<String>()
+        var anonymous = 0
+        for id in clients.keys {
+            if let device = deviceIds[id] {
+                devices.insert(device)
+            } else {
+                anonymous += 1
+            }
+        }
+        let count = devices.count + anonymous
         Task { @MainActor in self.clientCount = count }
+    }
+
+    private func registerClient(_ conn: NWConnection) {
+        let id = ObjectIdentifier(conn)
+        clients[id] = conn
+        lastSeen[id] = Date()
+        recomputeClientCount()
         // Push the current system volume so the slider reflects reality on
         // first paint instead of waiting for the next local change.
         if let value = SystemVolume.get() {
@@ -278,9 +343,13 @@ final class Server: ObservableObject, @unchecked Sendable {
     }
 
     private func unregisterClient(_ conn: NWConnection) {
-        clients.removeValue(forKey: ObjectIdentifier(conn))
-        let count = clients.count
-        Task { @MainActor in self.clientCount = count }
+        let id = ObjectIdentifier(conn)
+        // Already gone (e.g. reaped by the heartbeat, then the read loop's
+        // error path fires too) — don't double-count or re-cancel.
+        guard clients.removeValue(forKey: id) != nil else { return }
+        lastSeen.removeValue(forKey: id)
+        deviceIds.removeValue(forKey: id)
+        recomputeClientCount()
         conn.cancel()
     }
 
@@ -305,6 +374,9 @@ final class Server: ObservableObject, @unchecked Sendable {
     }
 
     private func handleFrame(_ frame: WebSocket.Frame, conn: NWConnection) {
+        // Any inbound frame — data, ping, or the pong answering our heartbeat
+        // — proves the connection is alive.
+        lastSeen[ObjectIdentifier(conn)] = Date()
         switch frame.opcode {
         case .text:
             guard let message = try? JSONDecoder().decode(ClientMessage.self, from: frame.payload) else {
@@ -323,8 +395,20 @@ final class Server: ObservableObject, @unchecked Sendable {
 
     private func handle(_ message: ClientMessage, conn: NWConnection) {
         switch message {
-        case .hello(let name):
+        case .hello(let name, let deviceId):
             NSLog("PoorDeck: client said hello (\(name ?? "anon"))")
+            if let deviceId {
+                // Tag this socket with its device. The count groups sockets by
+                // device id, so several connections from one phone (a reload
+                // that raced the old socket's teardown, or two open tabs) fold
+                // into a single counted device. We deliberately don't kill the
+                // older socket — two *live* tabs would otherwise evict each
+                // other forever. Truly-dead sockets are reaped by the
+                // heartbeat, and until then they share this id so they don't
+                // inflate the count anyway.
+                deviceIds[ObjectIdentifier(conn)] = deviceId
+                recomputeClientCount()
+            }
         case .press(let buttonId):
             Task { @MainActor in
                 let button = DeckStore.shared.button(id: buttonId)

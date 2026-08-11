@@ -253,7 +253,12 @@ enum ServerMessage: Codable {
 
 /// client -> server
 enum ClientMessage: Decodable {
-    case hello(name: String?)
+    /// First message after the socket opens. `deviceId` is a stable id the
+    /// client persists in `localStorage`, so a reload / reconnect / service
+    /// worker from the *same* physical device reuses it. The server keys the
+    /// connected-device count on it, which is what stops one phone from
+    /// showing up as two or three "devices".
+    case hello(name: String?, deviceId: String?)
     case press(buttonId: String)
     /// Continuous control input. `volume` updates the given target to `value`
     /// (0…1) and is fire-and-forget — there's no per-message ack; the server
@@ -273,13 +278,14 @@ enum ClientMessage: Decodable {
     case activateApp(bundleId: String)
 
     private enum CodingKeys: String, CodingKey {
-        case type, name, buttonId, target, value, id, muted, isPortrait, bundleId
+        case type, name, deviceId, buttonId, target, value, id, muted, isPortrait, bundleId
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
-        case "hello": self = .hello(name: try c.decodeIfPresent(String.self, forKey: .name))
+        case "hello": self = .hello(name: try c.decodeIfPresent(String.self, forKey: .name),
+                                    deviceId: try c.decodeIfPresent(String.self, forKey: .deviceId))
         case "press": self = .press(buttonId: try c.decode(String.self, forKey: .buttonId))
         case "volume":
             self = .volume(target: try c.decode(VolumeTarget.self, forKey: .target),
