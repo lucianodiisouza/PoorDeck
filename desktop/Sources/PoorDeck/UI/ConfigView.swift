@@ -126,11 +126,16 @@ struct ConfigView: View {
     }
 
     private var pairingPanel: some View {
-        VStack(spacing: 18) {
-            Text("Scan to pair")
+        let isPaired = server.clientCount > 0
+        return VStack(spacing: 18) {
+            Text(isPaired ? "Paired" : "Scan to pair")
                 .font(.title3.bold())
 
-            if let image = QRCode.image(from: server.pairingURL) {
+            if isPaired {
+                // A device is connected — the QR has done its job, so show a
+                // reassuring green check in its place.
+                pairedBadge
+            } else if let image = QRCode.image(from: server.pairingURL) {
                 Image(nsImage: image)
                     .interpolation(.none)
                     .resizable()
@@ -145,7 +150,9 @@ struct ConfigView: View {
             }
 
             VStack(spacing: 4) {
-                Text("or open in a browser on the same Wi-Fi")
+                Text(isPaired
+                     ? "connect more devices on the same Wi-Fi"
+                     : "or open in a browser on the same Wi-Fi")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(server.pairingURL)
@@ -153,11 +160,29 @@ struct ConfigView: View {
                     .textSelection(.enabled)
             }
 
-            Label("\(server.clientCount) connected", systemImage: "iphone")
-                .foregroundStyle(.secondary)
+            Label(
+                "^[\(server.clientCount) device](inflect: true) connected",
+                systemImage: "iphone"
+            )
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+        .animation(.easeInOut(duration: 0.25), value: isPaired)
+    }
+
+    /// Green check shown in place of the QR code once a device pairs.
+    private var pairedBadge: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.green.opacity(0.12))
+            .frame(width: 220, height: 220)
+            .overlay(
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 120, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .symbolRenderingMode(.hierarchical)
+            )
+            .transition(.opacity.combined(with: .scale))
     }
 
     private var permissionsPanel: some View {
