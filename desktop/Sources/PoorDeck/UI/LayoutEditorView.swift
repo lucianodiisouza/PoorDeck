@@ -62,22 +62,28 @@ struct LayoutEditorView: View {
     }
 
     private var hintPane: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 10) {
             Spacer()
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 32))
-                .foregroundStyle(.tertiary)
-            Text("Select a button")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text("Click any button in the grid to edit it.")
+            ZStack {
+                Circle()
+                    .fill(Color.primary.opacity(0.06))
+                    .frame(width: 64, height: 64)
+                Image(systemName: "hand.tap")
+                    .font(.system(size: 26, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            Text("No button selected")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+            Text("Click a button in the preview to edit its label, icon, and action.")
                 .font(.callout)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
+        .padding(28)
     }
 
     // MARK: Page list
@@ -480,58 +486,140 @@ private struct ButtonForm: View {
     let onDelete: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Button").font(.headline)
-                    Spacer()
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                }
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    previewHeader
 
-                Group {
-                    LabeledField(label: "Label") {
-                        TextField("Label", text: binding(\.label))
-                    }
-                    LabeledField(label: "Symbol") {
-                        TextField("SF Symbol name", text: bindingOptional(\.symbol, default: "app.fill"))
-                    }
-                    LabeledField(label: "Action") {
-                        Picker("", selection: binding(\.action.kind)) {
-                            Text("None").tag(Action.Kind.none)
-                            Text("Open app").tag(Action.Kind.openApp)
-                            Text("Keyboard shortcut").tag(Action.Kind.keyShortcut)
-                            Text("Volume").tag(Action.Kind.volume)
+                    section("Appearance") {
+                        LabeledField(label: "Label") {
+                            TextField("Label", text: binding(\.label))
+                                .textFieldStyle(.roundedBorder)
                         }
-                        .labelsHidden()
+                        LabeledField(label: "Symbol") {
+                            HStack(spacing: 8) {
+                                TextField("SF Symbol name",
+                                          text: bindingOptional(\.symbol, default: "app.fill"))
+                                    .textFieldStyle(.roundedBorder)
+                                Image(systemName: button.symbol ?? "app.fill")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 22, height: 22)
+                            }
+                        }
+                    }
+
+                    section("Action") {
+                        LabeledField(label: "Type") {
+                            Picker("", selection: binding(\.action.kind)) {
+                                Text("None").tag(Action.Kind.none)
+                                Text("Open app").tag(Action.Kind.openApp)
+                                Text("Keyboard shortcut").tag(Action.Kind.keyShortcut)
+                                Text("Volume").tag(Action.Kind.volume)
+                            }
+                            .labelsHidden()
+                        }
+
+                        switch button.action.kind {
+                        case .none:
+                            actionHint("This button does nothing on tap.")
+                        case .openApp:
+                            LabeledField(label: "Bundle id") {
+                                TextField("com.example.app", text: bindingForBundleId())
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                        case .keyShortcut:
+                            ShortcutEditor(button: button, onChange: onChange)
+                        case .volume:
+                            actionHint("Controls the system master volume. The per-app volume list is live; this control stays a simple slider/mute pair.")
+                        }
                     }
                 }
-
-                Divider()
-
-                switch button.action.kind {
-                case .none:
-                    Text("This button does nothing on tap.")
-                        .foregroundStyle(.secondary)
-                        .font(.callout)
-                case .openApp:
-                    LabeledField(label: "Bundle id") {
-                        TextField("com.example.app", text: bindingForBundleId())
-                    }
-                case .keyShortcut:
-                    ShortcutEditor(button: button, onChange: onChange)
-                case .volume:
-                    Text("Controls the system master volume. The per-app volume list is live; this control stays a simple slider/mute pair.")
-                        .foregroundStyle(.secondary)
-                        .font(.callout)
-                }
+                .padding(20)
             }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete Button", systemImage: "trash")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .tint(.red)
             .padding(16)
         }
+    }
+
+    /// Live mini-tile of the button as it renders on the device, plus the
+    /// label and a plain-language summary of what tapping it does — so the
+    /// inspector has an anchor mirroring the canvas header.
+    private var previewHeader: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(red: 0.11, green: 0.12, blue: 0.15))
+                if let icon = button.icon,
+                   let nsImage = DevicePreview.imageFromDataURL(icon) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .padding(11)
+                } else {
+                    Image(systemName: button.symbol ?? "questionmark.square")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: 54, height: 54)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(button.label.isEmpty ? "Untitled" : button.label)
+                    .font(.system(size: 16, weight: .semibold))
+                    .lineLimit(1)
+                Text(actionSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var actionSummary: String {
+        switch button.action.kind {
+        case .none: return "No action"
+        case .openApp: return "Opens an app"
+        case .keyShortcut: return "Keyboard shortcut"
+        case .volume: return "System volume"
+        }
+    }
+
+    /// A section: a small uppercase header over its fields, matching the
+    /// label styling used across the Pages screen.
+    @ViewBuilder
+    private func section(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+
+    private func actionHint(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: Bindings
@@ -555,10 +643,6 @@ private struct ButtonForm: View {
                 onChange(button.with(keyPath, setTo: newValue.isEmpty ? nil : newValue))
             }
         )
-    }
-
-    private func defaulted(_ fallback: String) -> (String?) -> String {
-        { $0 ?? fallback }
     }
 
     private func bindingForBundleId() -> Binding<String> {
@@ -655,8 +739,10 @@ private struct LabeledField<Content: View>: View {
     let label: String
     @ViewBuilder var content: () -> Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
             content()
         }
     }
