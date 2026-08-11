@@ -164,6 +164,14 @@ final class ConfigurationStore: ObservableObject {
         commit()
     }
 
+    /// Apply an in-place edit to the theme. The editor's color pickers and
+    /// radius slider funnel every change through here, so each tweak persists
+    /// and broadcasts to connected clients just like a page/button edit.
+    func updateTheme(_ transform: (inout Theme) -> Void) {
+        transform(&layout.theme)
+        commit()
+    }
+
     /// Discard any unsaved in-memory state and reload from disk. Used by
     /// the editor's "Revert" button.
     func reload() {

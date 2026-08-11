@@ -11,12 +11,14 @@ struct ConfigView: View {
     enum Section: String, CaseIterable, Identifiable {
         case pairing = "Pairing"
         case pages = "Pages"
+        case themes = "Themes"
         case permissions = "Permissions"
         var id: String { rawValue }
         var icon: String {
             switch self {
             case .pairing: return "qrcode"
             case .pages: return "square.grid.2x2"
+            case .themes: return "paintpalette"
             case .permissions: return "lock.shield"
             }
         }
@@ -116,6 +118,8 @@ struct ConfigView: View {
             pairingPanel
         case .pages:
             LayoutEditorView(store: config)
+        case .themes:
+            ThemeEditorView(store: config)
         case .permissions:
             permissionsPanel
         }
