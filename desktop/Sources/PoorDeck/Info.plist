@@ -37,5 +37,47 @@
 	     in the TCC prompt the first time the user adjusts an app's volume. -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PoorDeck captures other apps' audio to control their volume individually.</string>
+	<!-- Registers the `.pdpack` extension as a real UTI (conforming to JSON).
+	     Without this, UTType(filenameExtension:) yields a throwaway dynamic
+	     type: NSSavePanel still exports fine, but NSOpenPanel greys out the
+	     saved packs so they can't be imported. -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>dev.oprimo.poordeck.pack</string>
+			<key>UTTypeDescription</key>
+			<string>PoorDeck Pack</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>pdpack</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<!-- Makes PoorDeck the owning app for `.pdpack` files so double-clicking
+	     one in Finder launches the app and hands it to the open handler in
+	     AppDelegate (which imports the pack's pages). -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PoorDeck Pack</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>dev.oprimo.poordeck.pack</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
