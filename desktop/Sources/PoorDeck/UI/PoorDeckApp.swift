@@ -9,6 +9,7 @@ struct PoorDeckApp: App {
         MenuBarExtra {
             MenuView()
                 .environmentObject(appDelegate.server)
+                .environmentObject(appDelegate.updateChecker)
         } label: {
             Image(systemName: "square.grid.3x3.fill")
         }
@@ -51,8 +52,10 @@ enum WindowID {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let server = Server()
     let permissions = Permissions()
+    let updateChecker = UpdateChecker()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         server.start()
+        updateChecker.check()
     }
 }
