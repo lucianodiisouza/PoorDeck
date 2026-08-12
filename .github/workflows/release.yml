@@ -23,9 +23,16 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
+    # macos-15 ships Xcode 16, which can read the objectVersion-77 project
+    # xcodegen writes. macos-14's Xcode 15.4 rejects it as a "future" format.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       # For a manual run the tag may not exist yet — make sure HEAD carries it
       # so `gh release create <tag>` has something to point at.
