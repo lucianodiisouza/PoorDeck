@@ -57,6 +57,29 @@ export const deck = $state<{
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+
+/// How often the client pings while connected. iOS Safari reclaims/reloads an
+/// idle `apple-mobile-web-app` page that has no JS/network activity — with the
+/// app being purely event-driven, an idle deck (nothing happening on the Mac)
+/// sat completely silent and iOS reload-looped it forever. A few seconds of
+/// heartbeat is enough to keep the page alive; the message also refreshes the
+/// server's liveness tracking.
+const KEEPALIVE_MS = 3000;
+
+function startKeepalive(): void {
+  stopKeepalive();
+  keepaliveTimer = setInterval(() => {
+    if (socket?.readyState === WebSocket.OPEN) send({ type: "ping" });
+  }, KEEPALIVE_MS);
+}
+
+function stopKeepalive(): void {
+  if (keepaliveTimer) {
+    clearInterval(keepaliveTimer);
+    keepaliveTimer = null;
+  }
+}
 
 /// A stable per-device id. Persisted in localStorage so a reload, a
 /// reconnect, or the PWA's service worker all report the *same* device —
@@ -96,6 +119,8 @@ export function connect(): void {
     // Report viewport orientation so the editor's "Follow device"
     // preview can mirror it. Re-sent on every resize/orientationchange.
     sendDeviceOrientation();
+    // Keep the page from being reclaimed by iOS while idle (see KEEPALIVE_MS).
+    startKeepalive();
   };
 
   ws.onmessage = (event) => {
@@ -136,6 +161,7 @@ export function connect(): void {
   ws.onclose = () => {
     deck.status = "closed";
     socket = null;
+    stopKeepalive();
     scheduleReconnect();
   };
 
