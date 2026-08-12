@@ -128,4 +128,7 @@ export type ClientMessage =
   | { type: "press"; buttonId: string }
   | { type: "volume"; target: VolumeTarget; value: number }
   | { type: "setAppVolume"; id: string; value: number; muted: boolean }
-  | { type: "activateApp"; bundleId: string };
+  | { type: "activateApp"; bundleId: string }
+  // Reports the client's current viewport orientation. Drives the editor's
+  // "Follow device" preview. Decoded by the desktop as `deviceOrientation`.
+  | { type: "deviceOrientation"; isPortrait: boolean };
