@@ -276,6 +276,13 @@ enum ClientMessage: Decodable {
     case deviceOrientation(isPortrait: Bool)
     /// Activate (or launch) a running app from the Dock page, by bundle id.
     case activateApp(bundleId: String)
+    /// Client keepalive. Carries no data; its only job is to be periodic
+    /// traffic. iOS Safari reclaims/reloads an idle `apple-mobile-web-app`
+    /// page that has no JS/network activity, which put the client in an
+    /// endless reload loop when nothing was happening on the Mac. The client
+    /// sends this every few seconds; the server just lets it refresh the
+    /// connection's `lastSeen` (see `handleFrame`) and otherwise ignores it.
+    case ping
 
     private enum CodingKeys: String, CodingKey {
         case type, name, deviceId, buttonId, target, value, id, muted, isPortrait, bundleId
@@ -300,6 +307,8 @@ enum ClientMessage: Decodable {
             )
         case "activateApp":
             self = .activateApp(bundleId: try c.decode(String.self, forKey: .bundleId))
+        case "ping":
+            self = .ping
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown client message")
         }

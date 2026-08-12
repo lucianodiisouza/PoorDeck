@@ -468,6 +468,10 @@ final class Server: ObservableObject, @unchecked Sendable {
             Task { @MainActor in
                 _ = AppLauncher.openApp(bundleId: bundleId)
             }
+        case .ping:
+            // Client keepalive — no action needed. `handleFrame` already
+            // refreshed `lastSeen` for this connection before dispatching.
+            break
         }
     }
 
