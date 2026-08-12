@@ -1,0 +1,83 @@
+name: Release DMG
+
+# Builds a self-contained PoorDeck.app, wraps it in a .dmg, and attaches it to
+# a GitHub Release.
+#
+# Triggers:
+#   • Pushing a tag like v0.2.0  → cuts (or updates) the release for that tag.
+#   • Manual "Run workflow"      → builds a DMG and publishes it under the tag
+#     you type in (handy for the very first release, or a re-run).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0). Created if it doesn't exist."
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write # required to create the release + upload the DMG
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # For a manual run the tag may not exist yet — make sure HEAD carries it
+      # so `gh release create <tag>` has something to point at.
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${TAG}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build DMG
+        id: dmg
+        run: scripts/make-dmg.sh "${{ steps.tag.outputs.tag }}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          DMG="${{ steps.dmg.outputs.dmg }}"
+
+          NOTES=$(cat <<'EOF'
+          Unsigned, un-notarized build. macOS will quarantine it on first launch.
+
+          To open it the first time:
+          1. Drag **PoorDeck.app** to **Applications** from the mounted disk image.
+          2. Right-click the app ▸ **Open**, then confirm — or run:
+             `xattr -dr com.apple.quarantine /Applications/PoorDeck.app`
+
+          Then look for the grid icon in your menu bar and open **configuration**
+          to pair a device.
+          EOF
+          )
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${DMG}" --clobber
+          else
+            gh release create "${TAG}" "${DMG}" \
+              --title "PoorDeck ${TAG}" \
+              --notes "${NOTES}" \
+              --target "${GITHUB_SHA}"
+          fi
