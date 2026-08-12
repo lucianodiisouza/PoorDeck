@@ -11,7 +11,7 @@ struct PoorDeckApp: App {
                 .environmentObject(appDelegate.server)
                 .environmentObject(appDelegate.updateChecker)
         } label: {
-            Image(systemName: "square.grid.3x3.fill")
+            MenuBarLabel()
         }
         .menuBarExtraStyle(.window)
 
@@ -47,6 +47,52 @@ enum WindowID {
     static let config = "config"
 }
 
+/// The persistent menu-bar icon. Besides drawing the glyph, it captures the
+/// scene's `openWindow` action into `WindowCoordinator` so non-View code (the
+/// file-open handler in `AppDelegate`) can bring the config window forward the
+/// same way the menu's "Open configuration…" item does.
+private struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: "square.grid.3x3.fill")
+            .onAppear { WindowCoordinator.shared.register(openWindow) }
+    }
+}
+
+/// Bridges AppKit callbacks to SwiftUI window opening. Holds the `openWindow`
+/// action once a scene has provided it; a request that arrives first (e.g. a
+/// `.pdpack` opened on cold launch, before the menu-bar label appears) is
+/// remembered and replayed the moment the action registers.
+@MainActor
+final class WindowCoordinator {
+    static let shared = WindowCoordinator()
+    private init() {}
+
+    private var openWindow: OpenWindowAction?
+    private var pendingConfig = false
+
+    /// Called by the menu-bar label once SwiftUI hands it the action.
+    func register(_ action: OpenWindowAction) {
+        openWindow = action
+        if pendingConfig {
+            pendingConfig = false
+            openConfig()
+        }
+    }
+
+    /// Bring the config window to the front, creating it if needed. Defers if
+    /// the action isn't available yet.
+    func openConfig() {
+        guard let openWindow else {
+            pendingConfig = true
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: WindowID.config)
+    }
+}
+
 /// Starts the server eagerly at launch so a client can pair immediately.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -62,5 +108,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         server.start()
         updateChecker.check()
+    }
+
+    /// Finder double-click / "Open with PoorDeck" on a `.pdpack` (declared in
+    /// CFBundleDocumentTypes) routes here. Each file is decoded and its pages
+    /// appended to the shared store, matching the in-app import button.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        var importedAny = false
+        for url in urls {
+            do {
+                let pack = try PackCodec.decode(Data(contentsOf: url))
+                ConfigurationStore.shared.importPages(pack.pages)
+                importedAny = true
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Couldn't import “\(url.lastPathComponent)”"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
+        // Surface the freshly imported pages so the import isn't a silent
+        // background action on this menu-bar-only app.
+        if importedAny {
+            WindowCoordinator.shared.openConfig()
+        }
     }
 }

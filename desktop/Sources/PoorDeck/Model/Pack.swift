@@ -33,7 +33,15 @@ struct Pack: Codable {
 /// filename extension so it needs no Info.plist declaration; falls back to
 /// plain JSON. Panels also allow `.json` so a pack saved that way still opens.
 extension UTType {
-    static let poorDeckPack = UTType(filenameExtension: "pdpack") ?? .json
+    /// Resolved from the `UTExportedTypeDeclarations` entry in Info.plist so it
+    /// is a real, registered type (conforming to `public.json`). This is what
+    /// lets the import open panel *select* saved packs — a dynamic type built
+    /// from the bare extension exports fine but greys the files out on open.
+    /// Must stay in sync with the Info.plist entry: `UTType(exportedAs:)` traps
+    /// if the identifier isn't declared there. Only referenced from the panels,
+    /// so it's never evaluated in unit tests (which don't touch the bundle).
+    static let poorDeckPack = UTType(exportedAs: "dev.oprimo.poordeck.pack",
+                                     conformingTo: .json)
 }
 
 @MainActor
