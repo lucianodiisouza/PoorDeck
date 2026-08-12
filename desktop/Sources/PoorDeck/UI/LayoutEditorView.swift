@@ -95,6 +95,13 @@ struct LayoutEditorView: View {
                     .font(.headline)
                 Spacer()
                 Button {
+                    importPack()
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderless)
+                .help("Import a pack…")
+                Button {
                     let id = "p\(Int(Date().timeIntervalSince1970))"
                     let n = store.layout.pages.count + 1
                     store.addPage(id: id, name: "Page \(n)")
@@ -184,6 +191,7 @@ struct LayoutEditorView: View {
 
                 DevicePreview(
                     page: pageWithIcons(page),
+                    theme: store.layout.theme,
                     device: $device,
                     portrait: $portrait,
                     followDevice: $followDevice,
@@ -217,6 +225,18 @@ struct LayoutEditorView: View {
                 .frame(maxWidth: 320, alignment: .leading)
 
                 Spacer(minLength: 12)
+
+                if page.id != "dock" {
+                    Button {
+                        PackCodec.exportWithPanel(name: page.name, pages: [page])
+                    } label: {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .help("Export this page as a shareable pack")
+                }
 
                 Button {
                     let newButton = DeckButton(
@@ -285,6 +305,16 @@ struct LayoutEditorView: View {
     }
     private func lastInsertedButtonId(in pageId: String) -> String? {
         store.layout.pages.first(where: { $0.id == pageId })?.buttons.last?.id
+    }
+
+    /// Pick a `.pdpack` and append its pages, then jump to the first one.
+    private func importPack() {
+        guard let pack = PackCodec.importWithPanel() else { return }
+        let added = store.importPages(pack.pages)
+        if let first = added.first {
+            selectedPageId = first
+            selectedButtonId = nil
+        }
     }
 
     /// The one column control people reach for every time: a labeled
@@ -496,13 +526,52 @@ private struct ButtonForm: View {
                             TextField("Label", text: binding(\.label))
                                 .textFieldStyle(.roundedBorder)
                         }
-                        LabeledField(label: usesAppIcon ? "Fallback icon" : "Icon") {
+
+                        // Custom image: a user PNG that travels with the layout
+                        // (and shared packs). When set on an app button it also
+                        // flips the override on, so their art wins immediately.
+                        LabeledField(label: "Custom image") {
+                            CustomImageField(
+                                customIcon: button.customIcon,
+                                onChoose: {
+                                    if let url = IconImport.chooseDataURL() {
+                                        var updated = button
+                                        updated.customIcon = url
+                                        updated.iconOverride = true
+                                        onChange(updated)
+                                    }
+                                },
+                                onRemove: {
+                                    var updated = button
+                                    updated.customIcon = nil
+                                    // Dropping the art has nothing to override.
+                                    if usesAppIcon { updated.iconOverride = false }
+                                    onChange(updated)
+                                }
+                            )
+                        }
+
+                        LabeledField(label: symbolFieldLabel) {
                             SymbolField(
                                 symbol: bindingOptional(\.symbol, default: "app.fill")
                             )
                         }
+
+                        // Only app-backed buttons have an app icon to override.
                         if usesAppIcon {
-                            actionHint("This button shows \(appIconLabel) own icon on the deck. The icon above is only used if that app isn't installed on this Mac.")
+                            LabeledField(label: "Shown on the deck") {
+                                Picker("", selection: bindingIconOverride()) {
+                                    Text("\(resolvedAppName ?? "App") icon").tag(false)
+                                    Text(button.customIcon != nil
+                                         ? "My custom image"
+                                         : "My icon (symbol)").tag(true)
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                            }
+                            actionHint(iconOverrideOn
+                                ? "This button shows your own icon instead of \(appIconLabel) icon."
+                                : "This button shows \(appIconLabel) own icon. Your custom image / symbol is used only if that app isn't installed on this Mac.")
                         }
                     }
 
@@ -560,7 +629,7 @@ private struct ButtonForm: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color(red: 0.11, green: 0.12, blue: 0.15))
-                if let icon = button.icon,
+                if let icon = previewIconDataURL,
                    let nsImage = DevicePreview.imageFromDataURL(icon) {
                     Image(nsImage: nsImage)
                         .resizable()
@@ -592,6 +661,13 @@ private struct ButtonForm: View {
         }
     }
 
+    /// The image the inspector's mini-tile should show, matching the client's
+    /// resolution: the custom art wins when overriding, otherwise the resolved
+    /// app icon (falling back to the custom art).
+    private var previewIconDataURL: String? {
+        iconOverrideOn ? button.customIcon : (button.icon ?? button.customIcon)
+    }
+
     private var actionSummary: String {
         switch button.action.kind {
         case .none: return "No action"
@@ -603,10 +679,25 @@ private struct ButtonForm: View {
     }
 
     /// True when this button carries a bundle id that resolves to an installed
-    /// app. `resolvedLayout()` bakes that app's own icon into the tile, and the
-    /// baked icon always wins over `symbol` — so the symbol is only a fallback.
+    /// app. `resolvedLayout()` bakes that app's own icon into the tile unless
+    /// `iconOverride` is on — so for these buttons the symbol / custom image is
+    /// otherwise only a fallback.
     private var usesAppIcon: Bool {
         resolvedAppName != nil
+    }
+    /// The override bit, treating nil as false.
+    private var iconOverrideOn: Bool { button.iconOverride == true }
+    /// The symbol field's label reflects its role: a plain "Icon" when the
+    /// symbol is what shows, or "Fallback icon" when the app icon wins and it's
+    /// only a stand-in for uninstalled apps.
+    private var symbolFieldLabel: String {
+        (usesAppIcon && !iconOverrideOn) ? "Fallback icon" : "Icon"
+    }
+    private func bindingIconOverride() -> Binding<Bool> {
+        Binding(
+            get: { button.iconOverride == true },
+            set: { onChange(button.with(\.iconOverride, setTo: $0)) }
+        )
     }
     private var resolvedAppName: String? {
         button.action.bundleId.flatMap { AppLauncher.displayName(bundleId: $0) }
@@ -839,6 +930,50 @@ private struct ModifierChips: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+}
+
+// MARK: - Custom image field
+
+/// A thumbnail + Choose / Replace / Remove control for the button's custom
+/// image. The image is stored as a PNG data URL in `customIcon`, so it travels
+/// with the layout and any shared pack — no file paths that break on another
+/// Mac.
+private struct CustomImageField: View {
+    let customIcon: String?
+    let onChoose: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+                if let customIcon, let img = DevicePreview.imageFromDataURL(customIcon) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .padding(4)
+                } else {
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 40, height: 40)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+
+            Button(customIcon == nil ? "Choose Image…" : "Replace…", action: onChoose)
+                .controlSize(.small)
+            if customIcon != nil {
+                Button("Remove", role: .destructive, action: onRemove)
+                    .controlSize(.small)
+            }
+            Spacer(minLength: 0)
         }
     }
 }

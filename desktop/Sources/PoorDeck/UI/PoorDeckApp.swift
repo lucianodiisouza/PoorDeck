@@ -55,6 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let updateChecker = UpdateChecker()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Under XCTest the app is only a test host — don't bind the network
+        // port or hit the update endpoint, so the suite stays hermetic.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
         server.start()
         updateChecker.check()
     }

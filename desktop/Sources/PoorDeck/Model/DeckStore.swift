@@ -30,16 +30,29 @@ final class DeckStore {
         layout = store.layout
     }
 
-    /// Resolve the current layout with fresh app icons baked in as data URLs.
-    /// Icons are resolved lazily here rather than stored so we don't hold
-    /// image data in the persisted JSON.
+    /// Resolve the current layout into the shape clients render: bake each
+    /// button's transient `icon` from the right source. Icon data isn't held
+    /// in the persisted JSON — only the user's `customIcon` is; the app's own
+    /// icon is resolved lazily here.
+    ///
+    /// Resolution per button, into `icon`:
+    ///   • `iconOverride` on  → the user's `customIcon` (their art wins; nil
+    ///     leaves `icon` empty so the client draws the SF-symbol / label).
+    ///   • otherwise, `openApp`/app-bound → the app's own icon, falling back
+    ///     to `customIcon` when the app isn't installed on this Mac.
+    ///   • otherwise → `customIcon` (custom art on a non-app button).
     func resolvedLayout() -> Layout {
         var l = layout
         for p in l.pages.indices {
             for b in l.pages[p].buttons.indices {
-                if let bundleId = l.pages[p].buttons[b].action.bundleId,
-                   l.pages[p].buttons[b].icon == nil {
-                    l.pages[p].buttons[b].icon = AppLauncher.iconDataURL(bundleId: bundleId)
+                let btn = l.pages[p].buttons[b]
+                if btn.iconOverride == true {
+                    l.pages[p].buttons[b].icon = btn.customIcon
+                } else if let bundleId = btn.action.bundleId {
+                    l.pages[p].buttons[b].icon =
+                        AppLauncher.iconDataURL(bundleId: bundleId) ?? btn.customIcon
+                } else {
+                    l.pages[p].buttons[b].icon = btn.customIcon
                 }
             }
         }

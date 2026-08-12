@@ -27,6 +27,9 @@ struct DevicePreview: View {
     }
 
     let page: Page
+    /// The active theme, so the canvas mirrors the real client's gap and
+    /// corner radius (square vs rounded) — not just the button contents.
+    let theme: Theme
     @Binding var device: DeviceFamily
     @Binding var portrait: Bool
     /// When true, the preview mirrors the orientation the most recent
@@ -290,7 +293,8 @@ struct DevicePreview: View {
         // for the available box, then centers the block. Keeping this in
         // sync is why the preview now matches the phone.
         let n = page.buttons.count
-        let gap: CGFloat = 12
+        // Mirror the client's theme-driven gap (0 = seamless).
+        let gap = CGFloat(theme.resolvedGap)
         let availableWidth = screenWidth - 28
         // Height budget = grid area - dots (16) - home indicator (30) -
         // inner padding (12). (The status bar + header were already
@@ -334,6 +338,9 @@ struct DevicePreview: View {
 
     private func previewCell(for button: DeckButton, side: CGFloat) -> some View {
         let isSelected = button.id == selectedButtonId
+        // Corner radius proportional to the theme's, so radius 0 shows as a
+        // true square in the preview and 18 (the default) reads like today.
+        let corner = max(0, side * 0.15 * (CGFloat(theme.radius) / 18.0))
         return Button {
             onSelect(button.id)
         } label: {
@@ -345,7 +352,7 @@ struct DevicePreview: View {
             // glyphs render large with no inner tile.
             VStack(spacing: side * 0.06) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: side * 0.15)
+                    RoundedRectangle(cornerRadius: corner)
                         .fill(Color(red: 0.11, green: 0.12, blue: 0.15))
                     if let icon = button.icon, let nsImage = Self.imageFromDataURL(icon) {
                         Image(nsImage: nsImage)
@@ -361,7 +368,7 @@ struct DevicePreview: View {
                 }
                 .frame(width: side, height: side)
                 .overlay(
-                    RoundedRectangle(cornerRadius: side * 0.15)
+                    RoundedRectangle(cornerRadius: corner)
                         .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
                 )
                 Text(button.label)

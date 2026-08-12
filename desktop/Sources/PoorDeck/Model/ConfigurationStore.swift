@@ -167,6 +167,43 @@ final class ConfigurationStore: ObservableObject {
         return true
     }
 
+    /// Append the pages from an imported pack, giving each a fresh unique page
+    /// id and de-duplicating button ids against everything already present, so
+    /// an import never collides with the user's existing pages or buttons.
+    /// Returns the ids of the pages that were added (so the UI can select one).
+    @discardableResult
+    func importPages(_ pages: [Page]) -> [String] {
+        var takenButtonIds = Set(layout.pages.flatMap { $0.buttons.map(\.id) })
+        var addedPageIds: [String] = []
+        for (offset, incoming) in pages.enumerated() {
+            var page = incoming
+            page.id = "imp\(Int(Date().timeIntervalSince1970))-\(offset)"
+            page.buttons = page.buttons.map { button in
+                var b = button
+                b.id = Self.disambiguate(id: b.id.isEmpty ? "btn" : b.id,
+                                         against: takenButtonIds)
+                takenButtonIds.insert(b.id)
+                return b
+            }
+            layout.pages.append(page)
+            addedPageIds.append(page.id)
+        }
+        commit()
+        return addedPageIds
+    }
+
+    /// Return `id` if free, else `id-2`, `id-3`, … until one isn't taken.
+    private static func disambiguate(id: String, against taken: Set<String>) -> String {
+        guard taken.contains(id) else { return id }
+        var n = 2
+        var candidate = "\(id)-\(n)"
+        while taken.contains(candidate) {
+            n += 1
+            candidate = "\(id)-\(n)"
+        }
+        return candidate
+    }
+
     func deleteButton(pageId: String, buttonId: String) {
         guard let pi = layout.pages.firstIndex(where: { $0.id == pageId }) else { return }
         layout.pages[pi].buttons.removeAll { $0.id == buttonId }

@@ -29,3 +29,26 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
         MACOSX_DEPLOYMENT_TARGET: "14.2"
+    # Fold the unit tests into the auto-generated PoorDeck scheme so
+    # `xcodebuild test -scheme PoorDeck` runs them.
+    scheme:
+      testTargets:
+        - PoorDeckTests
+
+  # Host-based unit tests. `@testable import PoorDeck` reuses the app module,
+  # so the tests exercise the real (MainActor) PackCodec + Codable wire types.
+  # AppDelegate skips server.start() under XCTest, so the host stays hermetic.
+  PoorDeckTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: PoorDeck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.oprimo.poordeck.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PoorDeck.app/Contents/MacOS/PoorDeck"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        MACOSX_DEPLOYMENT_TARGET: "14.2"

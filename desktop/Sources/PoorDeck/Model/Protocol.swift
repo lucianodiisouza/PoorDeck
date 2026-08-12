@@ -55,8 +55,21 @@ enum OrientationLock: String, Codable, Equatable {
 struct DeckButton: Codable, Identifiable, Equatable {
     var id: String
     var label: String
-    /// PNG data URL (e.g. the app's own icon), when we have one.
+    /// Resolved PNG data URL baked in by `DeckStore.resolvedLayout()` before
+    /// the layout is sent (the app's own icon, or the user's `customIcon`).
+    /// Transient: the persisted layout leaves this nil and it's filled per
+    /// send.
     var icon: String?
+    /// A user-supplied PNG data URL that persists with the layout and travels
+    /// inside shared packs. Kept separate from `icon` (the transient resolved
+    /// slot) so a user's art and an app's baked icon don't fight over one
+    /// field. Shown when `iconOverride` is on, or as a fallback when an
+    /// `openApp` button's target isn't installed on this Mac.
+    var customIcon: String? = nil
+    /// When true, the tile shows `customIcon` / `symbol` instead of the target
+    /// app's own icon. Lets the user override the auto-resolved app icon with
+    /// their own art. nil / false keeps the old behavior (app icon wins).
+    var iconOverride: Bool? = nil
     /// SF-Symbol-style fallback name the client maps to its own glyphs.
     var symbol: String?
     var action: Action
@@ -139,15 +152,27 @@ struct Theme: Codable, Equatable {
     var surface: String
     var text: String
     var accent: String
-    /// Corner radius (px) for buttons.
+    /// Corner radius (px) for buttons. 0 = squared (non-rounded).
     var radius: Int
+    /// Gap between buttons (px). 0 = seamless, no-gap grid. Optional so
+    /// layouts saved before it existed keep decoding; readers default to
+    /// `defaultGap` when absent.
+    var gap: Int? = nil
+
+    /// Fallback gap used everywhere `gap` is nil (older layouts). Matches the
+    /// value the client and preview used when it was a hardcoded constant.
+    static let defaultGap = 12
+
+    /// Resolved gap, applying the default for layouts saved before the field.
+    var resolvedGap: Int { gap ?? Self.defaultGap }
 
     static let dark = Theme(
         background: "#0f1115",
         surface: "#1b1f27",
         text: "#e7e9ee",
         accent: "#5b8cff",
-        radius: 18
+        radius: 18,
+        gap: 12
     )
 }
 

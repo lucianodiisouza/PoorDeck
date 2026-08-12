@@ -28,7 +28,20 @@ export interface Page {
 export interface Button {
   id: string;
   label: string;
-  icon?: string | null; // PNG data URL
+  /** Resolved PNG data URL the server bakes in before sending (an app's own
+   *  icon, or the user's custom image — see `customIcon` / `iconOverride`).
+   *  Transient: authored layouts leave this null and the server fills it. */
+  icon?: string | null;
+  /** A user-supplied PNG data URL that travels with the layout (and with
+   *  shared packs). Distinct from `icon`, which is the transient resolved
+   *  slot. Used as the tile art when `iconOverride` is on, or as a fallback
+   *  when an `openApp` button's target app isn't installed. */
+  customIcon?: string | null;
+  /** When true, the tile shows `customIcon` / `symbol` instead of the
+   *  target app's own icon. Lets a user override the auto-resolved app icon
+   *  with their own art. Undefined / false keeps the old behavior (app icon
+   *  wins). */
+  iconOverride?: boolean;
   symbol?: string | null; // SF-symbol-style fallback name
   action: Action;
 }
@@ -70,7 +83,12 @@ export interface Theme {
   surface: string;
   text: string;
   accent: string;
+  /** Button corner radius (px). 0 = squared (non-rounded) buttons. */
   radius: number;
+  /** Gap between buttons (px). 0 = seamless, no-gap grid. Optional so
+   *  layouts saved before it existed keep decoding; the client defaults
+   *  to 12 when absent. */
+  gap?: number;
 }
 
 /// Per-app audio snapshot. The id is an opaque string (CoreAudio
