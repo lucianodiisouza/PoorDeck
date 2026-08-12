@@ -5,6 +5,8 @@
   tablet, or any browser on the same Wi-Fi.</em>
 </p>
 
+<img width="1469" height="1088" alt="Screenshot 2026-08-12 at 10 19 12" src="https://github.com/user-attachments/assets/e9c31535-69e8-419e-bae2-f63dee7cd3e2" />
+
 PoorDeck is two projects:
 
 - **`desktop/`** — a macOS menu-bar app (SwiftUI) that *is* the server. It hosts
