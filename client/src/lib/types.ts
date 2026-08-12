@@ -119,7 +119,11 @@ export type ServerMessage =
   | { type: "volume"; target: VolumeTarget; value: number }
   | { type: "apps"; list: AudioApp[] }
   | { type: "dock"; list: RunningApp[] }
-  | { type: "appVolume"; id: string; volume: number; muted: boolean };
+  | { type: "appVolume"; id: string; volume: number; muted: boolean }
+  // Reply to the client's `ping`. Used purely to prove the socket is alive
+  // end-to-end; a missing pong past the liveness deadline means the
+  // connection has silently died (common on iOS after backgrounding).
+  | { type: "pong" };
 
 // client -> server
 export type ClientMessage =

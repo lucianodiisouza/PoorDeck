@@ -67,10 +67,29 @@ let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 /// server's liveness tracking.
 const KEEPALIVE_MS = 3000;
 
+/// If we send pings but hear *nothing* back for this long, the socket is
+/// considered silently dead and we reconnect. The server answers every `ping`
+/// with a `pong`, so on a healthy LAN connection this resets every few
+/// seconds; only a genuinely one-way-dead socket (the classic iOS
+/// backgrounded-then-foregrounded case, where `readyState` still lies "OPEN")
+/// ages past the deadline. Set to tolerate two missed pongs.
+const LIVENESS_TIMEOUT_MS = 8000;
+/// Timestamp of the last inbound frame (any server message, including `pong`).
+/// Any traffic proves the socket is alive, not just the pong.
+let lastInboundAt = 0;
+
 function startKeepalive(): void {
   stopKeepalive();
+  lastInboundAt = Date.now(); // grace period: assume alive right after open
   keepaliveTimer = setInterval(() => {
-    if (socket?.readyState === WebSocket.OPEN) send({ type: "ping" });
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    if (Date.now() - lastInboundAt > LIVENESS_TIMEOUT_MS) {
+      // Pings went unanswered past the deadline — the socket is dead despite
+      // reporting OPEN. Stop trusting it and reconnect from scratch.
+      reconnectNow();
+      return;
+    }
+    send({ type: "ping" });
   }, KEEPALIVE_MS);
 }
 
@@ -115,6 +134,7 @@ export function connect(): void {
 
   ws.onopen = () => {
     deck.status = "open";
+    reconnectAttempt = 0;
     send({ type: "hello", name: navigator.userAgent, deviceId: deviceId() });
     // Report viewport orientation so the editor's "Follow device"
     // preview can mirror it. Re-sent on every resize/orientationchange.
@@ -128,6 +148,13 @@ export function connect(): void {
     try {
       msg = JSON.parse(event.data);
     } catch {
+      return;
+    }
+    // Any inbound frame proves the socket is alive; refresh the liveness clock
+    // the keepalive checks against.
+    lastInboundAt = Date.now();
+    if (msg.type === "pong") {
+      // Liveness-only; the timestamp bump above is its entire purpose.
       return;
     }
     if (msg.type === "layout") {
@@ -168,12 +195,53 @@ export function connect(): void {
   ws.onerror = () => ws.close();
 }
 
+/// Backoff for *passive* reconnects (an unexpected `onclose`). The first
+/// retry is near-instant so a brief Wi-Fi blip recovers without the user
+/// noticing; it then settles to a steady interval. Reset to 0 on every
+/// successful open.
+const RECONNECT_BACKOFF_MS = [300, 800, 1500];
+let reconnectAttempt = 0;
+
 function scheduleReconnect(): void {
   if (reconnectTimer) return;
+  const delay =
+    RECONNECT_BACKOFF_MS[Math.min(reconnectAttempt, RECONNECT_BACKOFF_MS.length - 1)];
+  reconnectAttempt += 1;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connect();
-  }, 1500);
+  }, delay);
+}
+
+/// Force a fresh connection right now, discarding any existing socket.
+///
+/// This is the cure for the iOS foreground race: when an installed PWA (or a
+/// Safari tab) is backgrounded, WebKit freezes the page — timers stop and the
+/// TCP socket dies without ever firing `onclose`. On return the stale socket
+/// frequently still reports `readyState === OPEN`, so we cannot trust it and
+/// must not wait for a reconnect that will never be scheduled. We detach the
+/// old socket's handlers (so its late `onclose` can't race a second connect),
+/// drop it, and reconnect immediately. The desktop dedups by `deviceId` and
+/// reaps the old socket via its heartbeat, so replacing a possibly-live socket
+/// is cheap and safe.
+function reconnectNow(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectAttempt = 0;
+  if (socket) {
+    socket.onclose = null;
+    socket.onerror = null;
+    try {
+      socket.close();
+    } catch {
+      /* already closing/closed */
+    }
+    socket = null;
+  }
+  stopKeepalive();
+  connect();
 }
 
 function send(message: ClientMessage): void {
@@ -211,6 +279,38 @@ if (typeof window !== "undefined") {
   // debounced or skipped during a rotation animation.
   const so = (screen as Screen & { orientation?: EventTarget }).orientation;
   so?.addEventListener?.("change", sendDeviceOrientation);
+
+  // Foreground recovery. iOS freezes a backgrounded page (installed PWA or
+  // Safari tab): its socket dies without firing `onclose` and the frozen
+  // reconnect timer never runs, so on return the deck can be silently dead
+  // while `readyState` still lies "OPEN". Instead of waiting for a reconnect
+  // that will never be scheduled, we act on the page becoming visible again.
+  if (typeof document !== "undefined") {
+    // If we were hidden longer than this, assume iOS killed the connection
+    // and reconnect unconditionally (a stale socket often still reads OPEN).
+    // Shorter app-switches with a genuinely-open socket are left untouched.
+    const STALE_AFTER_HIDDEN_MS = 10_000;
+    let hiddenSince: number | null = null;
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        hiddenSince = Date.now();
+        return;
+      }
+      const hiddenMs = hiddenSince ? Date.now() - hiddenSince : 0;
+      hiddenSince = null;
+      // A handshake already in flight — let it finish.
+      if (socket?.readyState === WebSocket.CONNECTING) return;
+      const open = socket?.readyState === WebSocket.OPEN;
+      if (!open || hiddenMs > STALE_AFTER_HIDDEN_MS) reconnectNow();
+    });
+  }
+
+  // bfcache restore (Back/forward or returning to a frozen tab): the page is
+  // resurrected with its old, now-dead socket. Always start fresh.
+  window.addEventListener("pageshow", (event) => {
+    if ((event as PageTransitionEvent).persisted) reconnectNow();
+  });
 }
 
 export function press(buttonId: string): void {

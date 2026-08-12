@@ -342,6 +342,29 @@ final class Server: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Drop every connected socket and clear all pairing state. Healthy
+    /// clients auto-reconnect (their `onclose` schedules a retry) and re-`hello`
+    /// with a fresh socket, so this acts as a "remove all and re-pair" reset —
+    /// the cure for a phantom device that inflated `clientCount` or a client
+    /// stuck in a half-open state that took a couple of reloads to pair. Sends
+    /// a WebSocket close frame first so the browser tears down cleanly, then
+    /// cancels the connection.
+    func disconnectAll() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            let close = WebSocket.encode(Data(), opcode: .close)
+            for conn in self.clients.values {
+                conn.send(content: close, completion: .idempotent)
+            }
+            let all = Array(self.clients.values)
+            self.clients.removeAll()
+            self.lastSeen.removeAll()
+            self.deviceIds.removeAll()
+            self.recomputeClientCount()
+            for conn in all { conn.cancel() }
+        }
+    }
+
     private func unregisterClient(_ conn: NWConnection) {
         let id = ObjectIdentifier(conn)
         // Already gone (e.g. reaped by the heartbeat, then the read loop's
@@ -469,9 +492,11 @@ final class Server: ObservableObject, @unchecked Sendable {
                 _ = AppLauncher.openApp(bundleId: bundleId)
             }
         case .ping:
-            // Client keepalive — no action needed. `handleFrame` already
-            // refreshed `lastSeen` for this connection before dispatching.
-            break
+            // Client keepalive. `handleFrame` already refreshed `lastSeen`.
+            // Reply with an app-level pong so the client can confirm the
+            // socket is alive end-to-end and time out a silently-dead one
+            // (see `ServerMessage.pong`).
+            sendServerMessage(.pong, to: conn)
         }
     }
 
