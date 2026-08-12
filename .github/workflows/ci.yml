@@ -1,0 +1,44 @@
+name: CI
+
+# Runs the desktop unit tests (PackCodec pack round-trip, etc.) on every push to
+# main and every pull request. Mirrors the release workflow's toolchain: the
+# Xcode project is generated from `desktop/project.yml` by xcodegen, so the
+# checked-in spec — not a committed .xcodeproj — is the source of truth.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-tests:
+    # macos-15 ships Xcode 16, which reads the objectVersion-77 project
+    # xcodegen writes (macos-14's Xcode 15.4 rejects it as a "future" format).
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: desktop
+        run: xcodegen generate
+
+      - name: Run unit tests
+        working-directory: desktop
+        run: >
+          xcodebuild test
+          -project PoorDeck.xcodeproj
+          -scheme PoorDeck
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO

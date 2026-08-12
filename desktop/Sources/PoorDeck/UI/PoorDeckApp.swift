@@ -9,6 +9,7 @@ struct PoorDeckApp: App {
         MenuBarExtra {
             MenuView()
                 .environmentObject(appDelegate.server)
+                .environmentObject(appDelegate.updateChecker)
         } label: {
             Image(systemName: "square.grid.3x3.fill")
         }
@@ -51,8 +52,15 @@ enum WindowID {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let server = Server()
     let permissions = Permissions()
+    let updateChecker = UpdateChecker()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Under XCTest the app is only a test host — don't bind the network
+        // port or hit the update endpoint, so the suite stays hermetic.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
         server.start()
+        updateChecker.check()
     }
 }

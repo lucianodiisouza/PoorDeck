@@ -51,6 +51,47 @@ struct ThemeEditorView: View {
                 ), in: 0...32, step: 1)
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Button gap")
+                    Spacer()
+                    Text("\(store.layout.theme.resolvedGap) px")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: Binding(
+                    get: { Double(store.layout.theme.resolvedGap) },
+                    set: { newValue in
+                        store.updateTheme { $0.gap = Int(newValue.rounded()) }
+                    }
+                ), in: 0...24, step: 1)
+                Text("0 gives a seamless, no-gap grid.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // One-tap looks. "Square" zeroes the radius; "Seamless" also drops
+            // the gap for the edge-to-edge, Touch-Portal-style grid; "Rounded"
+            // restores the comfortable defaults.
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Presets")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                HStack(spacing: 8) {
+                    Button("Rounded") {
+                        store.updateTheme { $0.radius = 18; $0.gap = 12 }
+                    }
+                    Button("Square") {
+                        store.updateTheme { $0.radius = 0 }
+                    }
+                    Button("Seamless") {
+                        store.updateTheme { $0.radius = 0; $0.gap = 0 }
+                    }
+                }
+                .controlSize(.small)
+            }
+
             Spacer()
 
             Button("Restore dark defaults") {
@@ -92,13 +133,13 @@ struct ThemeEditorView: View {
         let t = store.layout.theme
         return VStack(alignment: .leading, spacing: 12) {
             Text("Preview").font(.subheadline).foregroundStyle(.secondary)
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(spacing: CGFloat(t.resolvedGap)) {
+                HStack(spacing: CGFloat(t.resolvedGap)) {
                     previewTile(label: "Safari", symbol: "safari", t: t)
                     previewTile(label: "Notes", symbol: "note.text", t: t)
                     previewTile(label: "Music", symbol: "music.note", t: t)
                 }
-                HStack(spacing: 12) {
+                HStack(spacing: CGFloat(t.resolvedGap)) {
                     previewTile(label: "Terminal", symbol: "terminal", t: t)
                     previewTile(label: "Finder", symbol: "folder", t: t)
                     previewTile(label: "Mail", symbol: "envelope", t: t)

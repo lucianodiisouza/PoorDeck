@@ -23,7 +23,6 @@
   let gridEl = $state<HTMLElement | null>(null);
   let gridW = $state(0);
   let gridH = $state(0);
-  const GAP = 12;
   const KEY_MAX = 220; // don't let keys get comical on iPad / desktop
 
   // How keys use the space:
@@ -96,6 +95,10 @@
 
   const pages = $derived(deck.layout?.pages ?? []);
   const theme = $derived(deck.layout?.theme ?? null);
+  // Gap between keys (px), theme-driven so it syncs to every device. 0 gives
+  // the seamless, no-gap grid. Feeds both the auto-fit packing math and the
+  // CSS `gap`. Defaults to 12 for layouts saved before the field existed.
+  const gap = $derived(theme?.gap ?? 12);
   const currentPage = $derived(pages[pageIndex] ?? null);
   // The Volume page gets a bespoke render (master + live app list). Detect
   // it by content, not a hardcoded id — inserting the Media page shifted
@@ -143,8 +146,8 @@
     let bestScore = -Infinity;
     for (let cols = 1; cols <= n; cols++) {
       const rows = Math.ceil(n / cols);
-      const cellW = (gridW - (cols - 1) * GAP) / cols;
-      const cellH = (gridH - (rows - 1) * GAP) / rows;
+      const cellW = (gridW - (cols - 1) * gap) / cols;
+      const cellH = (gridH - (rows - 1) * gap) / rows;
       if (cellW <= 0 || cellH <= 0) continue;
       // Higher is better.
       //   square — the fitting square edge (biggest keys).
@@ -182,8 +185,8 @@
     const cols = effectiveColumns;
     const rows = rowCount;
     if (gridW === 0 || gridH === 0) return keyMax;
-    const cellW = (gridW - (cols - 1) * GAP) / cols;
-    const cellH = (gridH - (rows - 1) * GAP) / rows;
+    const cellW = (gridW - (cols - 1) * gap) / cols;
+    const cellH = (gridH - (rows - 1) * gap) / rows;
     return Math.max(40, Math.min(cellW, cellH, keyMax));
   });
 
@@ -265,6 +268,7 @@
     root.setProperty("--wd-text", theme.text);
     root.setProperty("--wd-accent", theme.accent);
     root.setProperty("--wd-radius", `${theme.radius}px`);
+    root.setProperty("--wd-gap", `${theme.gap ?? 12}px`);
   });
 
   // Enforce the page's orientation lock on the device itself. Safari
@@ -616,7 +620,7 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    gap: 12px;
+    gap: var(--wd-gap, 12px);
   }
   /* Square mode: --cols / --rows / --key are set inline from the
      auto-fit packing. Tracks are sized to the square key so keys stay
