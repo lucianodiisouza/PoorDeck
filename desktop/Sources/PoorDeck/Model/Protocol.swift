@@ -223,6 +223,13 @@ enum ServerMessage: Codable {
     /// client-driven set (so other clients can mirror it) and on connect
     /// for any app that already has a non-default stored level.
     case appVolume(id: String, volume: Float, muted: Bool)
+    /// Reply to the client's app-level `ping`. Lets the client confirm the
+    /// socket is alive end-to-end: on iOS a backgrounded socket can keep
+    /// reporting `readyState === OPEN` after it has silently died, and the
+    /// browser's automatic WebSocket-frame pong is invisible to page JS, so
+    /// this explicit application reply is the only signal the client can time
+    /// out on to detect a one-way-dead connection.
+    case pong
 
     private enum CodingKeys: String, CodingKey {
         case type, data, buttonId, ok, target, value, list, id, volume, muted
@@ -253,6 +260,8 @@ enum ServerMessage: Codable {
             try c.encode(id, forKey: .id)
             try c.encode(volume, forKey: .volume)
             try c.encode(muted, forKey: .muted)
+        case .pong:
+            try c.encode("pong", forKey: .type)
         }
     }
 
@@ -270,6 +279,7 @@ enum ServerMessage: Codable {
             self = .appVolume(id: try c.decode(String.self, forKey: .id),
                               volume: try c.decode(Float.self, forKey: .volume),
                               muted: try c.decode(Bool.self, forKey: .muted))
+        case "pong": self = .pong
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: c,
                                                         debugDescription: "unknown server message")
         }

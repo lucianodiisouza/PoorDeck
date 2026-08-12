@@ -165,6 +165,19 @@ struct ConfigView: View {
                 systemImage: "iphone"
             )
             .foregroundStyle(.secondary)
+
+            if isPaired {
+                // Disconnect every paired client and clear the pairing state.
+                // Healthy devices reconnect on their own; the useful case is a
+                // phantom/stuck device that needed a couple of reloads to pair —
+                // this wipes the slate so everything re-pairs fresh.
+                Button(role: .destructive) {
+                    server.disconnectAll()
+                } label: {
+                    Label("Clear paired devices", systemImage: "arrow.clockwise")
+                }
+                .help("Disconnect all devices so they re-pair from scratch")
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
